@@ -162,7 +162,7 @@ function Xerath:OnDraw()
         self.menu.xerathDraw.r.rb:get()
     )
     if myHero.spellbook:Spell(3).level > 0 then
-        self.r.range = 2000 + 1200 * myHero.spellbook:Spell(3).level
+        self.r.range = self:GetRRange()
         if self.menu.xerathDraw.r.r:get() then
             DrawHandler:Circle3D(myHero.position, self.r.range, color)
         end
@@ -240,8 +240,12 @@ function Xerath:CastE(target)
     end
 end
 
+function Xerath:GetRRange()
+    return 2000 + 1200 * myHero.spellbook:Spell(3).level
+end
+
 function Xerath:CastR()
-    self.r.range = 2000 + 1200 * myHero.spellbook:Spell(3).level
+    self.r.range = self:GetRRange()
     if myHero.spellbook:CanUseSpell(3) == 0 and self.menu.tap:get() then
         local targets = self:GetTarget(self.r.range, true)
         local targetMouse, targetGen = nil, nil

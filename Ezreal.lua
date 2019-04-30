@@ -38,7 +38,7 @@ function Ezreal:__init()
     self:Menu()
     self.TS =
         DreamTS(
-        self.menu.dreamTS,
+        self.menu.dreamTs,
         {
             ValidTarget = function(unit)
                 return IsValidTarget(unit, self.r.range)
