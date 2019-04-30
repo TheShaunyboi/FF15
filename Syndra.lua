@@ -503,8 +503,8 @@ function Syndra:CastW2(target)
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
                 GetDistanceSqr(pred.castPosition) <= self.spell.w.rangeSqr
          then
-            print("Dist = " .. GetDistance(pred.castPosition, grabbedTarget.position))
-            print("Pred speed = " .. self.spell.w.speed)
+            print("Dist Grab to Target= " .. GetDistance(pred.castPosition, grabbedTarget.position))
+            print("Dist myHero to Target = " .. GetDistance(pred.castPosition))
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
         end
