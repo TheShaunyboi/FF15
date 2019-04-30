@@ -63,7 +63,7 @@ function Xerath:__init()
         self.menu.dreamTs,
         {
             ValidTarget = function(unit)
-                return IsValidTarget(unit)
+                return _G.Prediction.IsValidTarget(unit)
             end,
             Damage = function(unit)
                 return dmgLib:CalculateMagicDamage(myHero, unit, 100)
@@ -360,15 +360,6 @@ function Xerath:GetQRange(remainingTime)
 end
 
 function Xerath:OnNewPath(obj, paths, isWalk, dashspeed)
-    --[[  if
-        myHero.spellbook:CanUseSpell(2) == 0 and obj and not isWalk and IsValidTarget(obj) and
-            self.menu.antigap[obj.charName] and
-            self.menu.antigap[obj.charName]:get() and
-            GetDistance(obj.position) <= self.e.range and
-            dashspeed ~= 0
-     then
-        self:CastE(obj)
-    end ]]
 end
 
 function Xerath:Hex(a, r, g, b)
@@ -377,7 +368,7 @@ end
 
 function Xerath:GetTarget(dist, all)
     self.TS.ValidTarget = function(unit)
-        return IsValidTarget(unit, dist)
+        return _G.Prediction.IsValidTarget(unit, dist)
     end
     local res = self.TS:update()
     if all then

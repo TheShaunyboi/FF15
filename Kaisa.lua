@@ -106,7 +106,7 @@ function Kaisa:W()
         --on CC
         for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
             if
-                IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
+            _G.Prediction.IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
                     _G.Prediction.IsImmobile(enemy, GetDistance(enemy) / self.w.speed + self.w.delay)
              then
                 self:CastW(enemy)

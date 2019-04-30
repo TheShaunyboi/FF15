@@ -74,7 +74,7 @@ function Syndra:init()
         self.menu.dreamTs,
         {
             ValidTarget = function(unit)
-                return IsValidTarget(unit)
+                return _G.Prediction.IsValidTarget(unit)
             end,
             Damage = function(unit)
                 return dmgLib:CalculateMagicDamage(myHero, unit, 100)
@@ -558,7 +558,7 @@ function Syndra:CalcQE(target, dist)
 end
 
 function Syndra:CastE(target)
-    if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and IsValidTarget(target) then
+    if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and _G.Prediction.IsValidTarget(target) then
         for i = 1, #self.orbs do
             local orb = self.orbs[i]
             local distToOrb = GetDistance(orb.obj.position)
@@ -826,7 +826,7 @@ end
 
 function Syndra:GetTarget(dist, all)
     self.TS.ValidTarget = function(unit)
-        return IsValidTarget(unit, dist)
+        return _G.Prediction.IsValidTarget(unit, dist)
     end
     local res = self.TS:update()
     if all then
