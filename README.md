@@ -27,4 +27,4 @@
 * Separate prediction for W center
 * Anti-gapcloser E
 * R minimap drawings
-* R on tap with near mouse prioritity
+* R on tap with near mouse priority
