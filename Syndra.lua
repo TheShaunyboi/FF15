@@ -107,12 +107,14 @@ function Syndra:init()
         end
     )
     ]]
+    --[[
     AddEvent(
         Events.OnNewPath,
         function(obj, paths, isWalk, dashspeed)
             self:OnNewPath(obj, paths, isWalk, dashspeed)
         end
     )
+    ]]
     AddEvent(
         Events.OnDraw,
         function()
@@ -195,8 +197,6 @@ function Syndra:OnTick()
              then
                 _, canHit = _G.Prediction.IsDashing(target, self.spell.e, myHero)
                 if canHit then
-                    print("canhit")
-
                     if self:CastQEShort(target) then
                         self.next = os.clock() + 0.05
                         return
@@ -240,7 +240,7 @@ function Syndra:OnTick()
         end
         local target = self:GetTarget(self.spell.w.range)
         if target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
-            if self.menu.use.w2:get() and wTarget and self:CastW2(target) then
+            if self.menu.use.w2:get() and target and self:CastW2(target) then
                 print("W2")
                 self.next = os.clock() + 0.05
                 return
@@ -349,11 +349,12 @@ function Syndra:AutoGrab()
     if
         myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and
             myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and
-            not _G.Prediction.IsRecalling(myHero)
+            not _G.Prediction.IsRecalling(myHero) and os.clock() >= self.spell.w.next1
      then
         for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
-            if minion.name == "Tibbers" or minion.name == "IvernMinion" then
-                myHero.spellbook:CastSpell(SpellSlot.W, minion.networkId)
+            if (minion.name == "Tibbers" or minion.name == "IvernMinion") and GetDistanceSqr(minion) < self.spell.w.rangeSqr then
+                myHero.spellbook:CastSpell(SpellSlot.W, minion.position)
+                self.spell.w.next1 = os.clock() + 0.2
                 return true
             end
         end
