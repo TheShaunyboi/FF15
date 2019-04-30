@@ -168,7 +168,7 @@ function Syndra:OnTick()
             table.remove(self.orbs, i)
         end
         local speed = self.orbs[i] and self.orbs[i].obj and self.orbs[i].obj.aiManagerClient.navPath.dashSpeed 
-        if speed > 100 and speed ~= 1200 and speed ~= self.lastPrint then
+        if speed and speed > 100 and speed ~= 1200 and speed ~= self.lastPrint then
             self.lastPrint = speed
             print(speed)
         end
