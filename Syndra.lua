@@ -1,18 +1,11 @@
---qe fucking up still, seems to not rely on it enough
---work on short qe accuracy
-
 local Syndra = {}
-local version = 0.6
+local version = 1
 --[[ if tonumber(GetInternalWebResult("Syndra.version")) > version then
     DownloadInternalFile("Syndra.lua", SCRIPT_PATH .. "Syndra.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("Syndra.version")) .. " Press F5")
 end ]]
 require "FF15Menu"
 require "utils"
-
---TODO: -needs to track enemies knocked back by close e so that w2 does not cast to the location pre knockback
---TODO: -qe is still fucking up
---TODO: -e sometimes doesn't activate
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment

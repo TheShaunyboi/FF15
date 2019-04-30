@@ -1,19 +1,11 @@
---w2 needs to have a delay after e cast
---qe fucking up still, seems to not rely on it enough
---work on short qe accuracy
-
 local Syndra = {}
-local version = 0.6
+local version = 1
 if tonumber(GetInternalWebResult("Syndra.version")) > version then
     DownloadInternalFile("Syndra.lua", SCRIPT_PATH .. "Syndra.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("Syndra.version")) .. " Press F5")
 end
 require "FF15Menu"
 require "utils"
-
---TODO: -needs to track enemies knocked back by close e so that w2 does not cast to the location pre knockback
---TODO: -qe is still fucking up
---TODO: -e sometimes doesn't activate
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
@@ -75,7 +67,7 @@ function Syndra:init()
         self.menu.dreamTs,
         {
             ValidTarget = function(unit)
-                return IsValidTarget(unit)
+                return _G.Prediction.IsValidTarget(unit)
             end,
             Damage = function(unit)
                 return dmgLib:CalculateMagicDamage(myHero, unit, 100)
@@ -108,12 +100,14 @@ function Syndra:init()
         end
     )
     ]]
+    --[[
     AddEvent(
         Events.OnNewPath,
         function(obj, paths, isWalk, dashspeed)
             self:OnNewPath(obj, paths, isWalk, dashspeed)
         end
     )
+    ]]
     AddEvent(
         Events.OnDraw,
         function()
@@ -189,17 +183,13 @@ function Syndra:OnTick()
         return
     end
     if os.clock() >= self.next then
-        local targets = self.TS:getAll(myHero, self.spell.qe.range + 50)
-        for i = 1, #targets do
-            local target = targets[i]
+        for _, target in ipairs(self:GetTarget(self.spell.qe.range + 50, true)) do
             if
                 self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() and
                     not _G.Prediction.IsRecalling(myHero)
              then
                 _, canHit = _G.Prediction.IsDashing(target, self.spell.e, myHero)
                 if canHit then
-                    print("canhit")
-
                     if self:CastQEShort(target) then
                         self.next = os.clock() + 0.05
                         return
@@ -241,34 +231,42 @@ function Syndra:OnTick()
                 end
             end
         end
-        local qTarget = self.TS:get(myHero, self.spell.q.range)
-        if LegitOrbwalker:GetMode() == "Combo" then
-            local wTarget = self.TS:get(myHero, self.spell.w.range)
-            if self.menu.use.w2:get() and wTarget and self:CastW2(wTarget) then
+        local target = self:GetTarget(self.spell.w.range)
+        if target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
+            if self.menu.use.w2:get() and target and self:CastW2(target) then
                 print("W2")
                 self.next = os.clock() + 0.05
                 return
             end
-            if self.menu.use.w1:get() and wTarget and self:CastW1() then
-                --print("W1")
+            if self.menu.use.w1:get() and target and self:CastW1() then
+                print("W1")
                 self.next = os.clock() + 0.05
                 return
             end
-            local qeTarget = self.TS:get(myHero, self.spell.qe.range, self.spell.e.range)
-            if self.menu.use.qe2:get() and qeTarget and self:CastQELong(qeTarget) then
-                --print("QELong")
-                self.next = os.clock() + 0.05
-                return
-            end
-            if self.menu.use.q:get() and qTarget and self:CastQ(qTarget) then
-                --print("Q")
-                self.next = os.clock() + 0.05
-                return
-            end
-        elseif LegitOrbwalker:GetMode() == "Harass" then
-            if qTarget and self:CastQ(qTarget) then
-                self.next = os.clock() + 0.05
-                return
+        end
+        target = self:GetTarget(self.spell.qe.range)
+        if
+            target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and
+                self.menu.use.qe2:get() and
+                self:CastQELong(target)
+         then
+            print("QELong")
+            self.next = os.clock() + 0.05
+            return
+        end
+        target = self:GetTarget(self.spell.q.range)
+        if target and not LegitOrbwalker:IsAttacking() then
+            if LegitOrbwalker:GetMode() == "Combo" and self.menu.use.q:get() then
+                if self:CastQ(target) then
+                    self.next = os.clock() + 0.05
+                    print("Q")
+                    return
+                end
+            elseif LegitOrbwalker:GetMode() == "Harass" then
+                if self:CastQ(target) then
+                    self.next = os.clock() + 0.05
+                    return
+                end
             end
         end
     end
@@ -344,11 +342,12 @@ function Syndra:AutoGrab()
     if
         myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and
             myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and
-            not _G.Prediction.IsRecalling(myHero)
+            not _G.Prediction.IsRecalling(myHero) and os.clock() >= self.spell.w.next1
      then
         for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
-            if minion.name == "Tibbers" or minion.name == "IvernMinion" then
-                myHero.spellbook:CastSpell(SpellSlot.W, minion.networkId)
+            if (minion.name == "Tibbers" or minion.name == "IvernMinion") and GetDistanceSqr(minion) < self.spell.w.rangeSqr then
+                myHero.spellbook:CastSpell(SpellSlot.W, minion.position)
+                self.spell.w.next1 = os.clock() + 0.2
                 return true
             end
         end
@@ -533,14 +532,7 @@ function Syndra:CanEQ(qPos, predPos, target)
         end
     end
     --cc check
-    if
-        target.buffManager:HasBuffOfType(4) or target.buffManager:HasBuffOfType(5) or
-            target.buffManager:HasBuffOfType(8) or
-            target.buffManager:HasBuffOfType(24) or
-            target.buffManager:HasBuffOfType(11) or
-            target.buffManager:HasBuffOfType(22) or
-            target.buffManager:HasBuffOfType(21)
-     then
+    if _G.Prediction.IsImmobile(target) then
         return false
     end
     return true
@@ -560,7 +552,7 @@ function Syndra:CalcQE(target, dist)
 end
 
 function Syndra:CastE(target)
-    if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and IsValidTarget(target) then
+    if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and _G.Prediction.IsValidTarget(target) then
         for i = 1, #self.orbs do
             local orb = self.orbs[i]
             local distToOrb = GetDistance(orb.obj.position)
@@ -824,6 +816,20 @@ end
 
 function Syndra:Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
+end
+
+function Syndra:GetTarget(dist, all)
+    self.TS.ValidTarget = function(unit)
+        return _G.Prediction.IsValidTarget(unit, dist)
+    end
+    local res = self.TS:update()
+    if all then
+        return res
+    else
+        if res and res[1] then
+            return res[1]
+        end
+    end
 end
 
 if myHero.charName == "Syndra" then
