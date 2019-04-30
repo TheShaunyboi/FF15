@@ -1,4 +1,3 @@
---w2 needs to have a delay after e cast
 --qe fucking up still, seems to not rely on it enough
 --work on short qe accuracy
 
@@ -189,9 +188,7 @@ function Syndra:OnTick()
         return
     end
     if os.clock() >= self.next then
-        local targets = self.TS:getAll(myHero, self.spell.qe.range + 50)
-        for i = 1, #targets do
-            local target = targets[i]
+        for target in pairs(self:GetTarget(self.spell.qe.range + 50, true)) do
             if
                 self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() and
                     not _G.Prediction.IsRecalling(myHero)
@@ -241,34 +238,42 @@ function Syndra:OnTick()
                 end
             end
         end
-        local qTarget = self.TS:get(myHero, self.spell.q.range)
-        if LegitOrbwalker:GetMode() == "Combo" then
-            local wTarget = self.TS:get(myHero, self.spell.w.range)
-            if self.menu.use.w2:get() and wTarget and self:CastW2(wTarget) then
+        local target = self:GetTarget(self.spell.w.range)
+        if target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
+            if self.menu.use.w2:get() and wTarget and self:CastW2(target) then
                 print("W2")
                 self.next = os.clock() + 0.05
                 return
             end
-            if self.menu.use.w1:get() and wTarget and self:CastW1() then
-                --print("W1")
+            if self.menu.use.w1:get() and target and self:CastW1() then
+                print("W1")
                 self.next = os.clock() + 0.05
                 return
             end
-            local qeTarget = self.TS:get(myHero, self.spell.qe.range, self.spell.e.range)
-            if self.menu.use.qe2:get() and qeTarget and self:CastQELong(qeTarget) then
-                --print("QELong")
-                self.next = os.clock() + 0.05
-                return
-            end
-            if self.menu.use.q:get() and qTarget and self:CastQ(qTarget) then
-                --print("Q")
-                self.next = os.clock() + 0.05
-                return
-            end
-        elseif LegitOrbwalker:GetMode() == "Harass" then
-            if qTarget and self:CastQ(qTarget) then
-                self.next = os.clock() + 0.05
-                return
+        end
+        target = self:GetTarget(self.spell.qe.range)
+        if
+            target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and
+                self.menu.use.qe2:get() and
+                self:CastQELong(target)
+         then
+            print("QELong")
+            self.next = os.clock() + 0.05
+            return
+        end
+        target = self:GetTarget(self.spell.q.range)
+        if target and not LegitOrbwalker:IsAttacking() then
+            if LegitOrbwalker:GetMode() == "Combo" and self.menu.use.q:get() then
+                if self:CastQ(target) then
+                    self.next = os.clock() + 0.05
+                    print("Q")
+                    return
+                end
+            elseif LegitOrbwalker:GetMode() == "Harass" then
+                if self:CastQ(target) then
+                    self.next = os.clock() + 0.05
+                    return
+                end
             end
         end
     end
@@ -824,6 +829,20 @@ end
 
 function Syndra:Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
+end
+
+function Syndra:GetTarget(dist, all)
+    self.TS.ValidTarget = function(unit)
+        return IsValidTarget(unit, dist)
+    end
+    local res = self.TS:update()
+    if all then
+        return res
+    else
+        if res and res[1] then
+            return res[1]
+        end
+    end
 end
 
 if myHero.charName == "Syndra" then
