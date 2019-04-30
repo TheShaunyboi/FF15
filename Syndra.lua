@@ -538,14 +538,7 @@ function Syndra:CanEQ(qPos, predPos, target)
         end
     end
     --cc check
-    if
-        target.buffManager:HasBuffOfType(4) or target.buffManager:HasBuffOfType(5) or
-            target.buffManager:HasBuffOfType(8) or
-            target.buffManager:HasBuffOfType(24) or
-            target.buffManager:HasBuffOfType(11) or
-            target.buffManager:HasBuffOfType(22) or
-            target.buffManager:HasBuffOfType(21)
-     then
+    if _G.Prediction.IsImmobile(target) then
         return false
     end
     return true
