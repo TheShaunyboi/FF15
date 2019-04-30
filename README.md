@@ -2,7 +2,7 @@
 
 ## Supported Champions
 ### Ezreal
-Uses Dream TS
+*Uses Dream TS
 Auto Q
 Prioritize W buff target
 Manual ult
