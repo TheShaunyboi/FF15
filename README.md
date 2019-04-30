@@ -22,6 +22,7 @@
 * Anti-gapcloser WE/QE
 * Tracks orbs pre initialization
 * Advanced ult logic with 8 customizable checks and ignite support
+* Auto grab Annie / Ivern ults
 
 ### Xerath
 * Uses Dream TS
