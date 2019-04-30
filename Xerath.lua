@@ -10,7 +10,7 @@ local DreamTS = require("DreamTS")
 local dmgLib = require("FF15DamageLib")
 
 function OnLoad()
-        if not _G.Prediction then
+    if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
 end
@@ -60,7 +60,7 @@ function Xerath:__init()
     self:Menu()
     self.TS =
         DreamTS(
-        self.menu,
+        self.menu.dreamTs,
         {
             ValidTarget = function(unit)
                 return IsValidTarget(unit)
@@ -108,6 +108,7 @@ end
 
 function Xerath:Menu()
     self.menu = Menu("asdfxerath", "Xerath")
+    self.menu:sub("dreamTs", "Target Selector")
     self.menu:slider("wc", "W Center Hitchance", 1, 100, 50)
     self.menu:slider("e", "E Hitchance", 1, 100, 50)
 
@@ -241,17 +242,32 @@ end
 
 function Xerath:CastR()
     self.r.range = 2000 + 1200 * myHero.spellbook:Spell(3).level
-    local target =
-        LegitOrbwalker:GetTarget(self.menu.rr:get(), "AP", pwHud.hudManager.virtualCursorPos) or
-        LegitOrbwalker:GetTarget(range, "AP", myHero)
-    if myHero.spellbook:CanUseSpell(3) == 0 and target and self.menu.tap:get() then
-        local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
-        if
-            pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                GetDistanceSqr(pred.castPosition) <= self.r.range * self.r.range
-         then
-            myHero.spellbook:CastSpell(3, pred.castPosition)
-            return true
+    if myHero.spellbook:CanUseSpell(3) == 0 and self.menu.tap:get() then
+        local targets = self:GetTarget(self.r.range, true)
+        local targetMouse, targetGen = nil, nil
+        for target in pairs(targets) do
+            if not targetGen then
+                targetGen = target
+            end
+            if
+                not targetMouse and
+                    GetDistanceSqr(pwHud.hudManager.virtualCursorPos, target.position) <=
+                        self.menu.rr:get() * self.menu.rr:get()
+             then
+                targetMouse = target
+            end
+        end
+        local target = targetMouse or targetGen
+        if target then
+            local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
+            if
+                pred and pred.castPosition and
+                    (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
+                    GetDistanceSqr(pred.castPosition) <= self.r.range * self.r.range
+             then
+                myHero.spellbook:CastSpell(3, pred.castPosition)
+                return true
+            end
         end
     end
 end
@@ -271,34 +287,34 @@ function Xerath:OnTick()
             return
         end
     end
-
-    local targets = self.TS:update()
-    for i = 1, #targets do
-        local target = targets[i]
+    for target in pairs(self:GetTarget(self.e.range, true)) do
         if self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() then
             _, canHit = _G.Prediction.IsDashing(target, self.e, myHero)
             if canHit then
                 self:CastE(target)
             end
         end
-        if LegitOrbwalker:GetMode() == "Combo" then
-            if self:CastE(target) then
-                return
-            end
-
+        if LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and self:CastE(target) then
+            return
+        end
+    end
+    local target = self:GetTarget(self.w1.range)
+    if target then
+        if LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
             if self:CastW2(target) then
                 return
             end
-
             if self:CastW1(target) then
                 return
             end
-
-            if self:CastQ(target) then
-                return
-            end
-        elseif LegitOrbwalker:GetMode() == "Harass" then
-            self:CastQ(target)
+        end
+    end
+    target = self:GetTarget(self.q.max)
+    if target then
+        if LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and self:CastQ(target) then
+            return
+        elseif LegitOrbwalker:GetMode() == "Harass" and not LegitOrbwalker:IsAttacking() and self:CastQ(target) then
+            return
         end
     end
 end
@@ -353,6 +369,20 @@ end
 
 function Xerath:Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
+end
+
+function Xerath:GetTarget(dist, all)
+    self.TS.ValidTarget = function(unit)
+        return IsValidTarget(unit, dist)
+    end
+    local res = self.TS:update()
+    if all then
+        return res
+    else
+        if res and res[1] then
+            return res[1]
+        end
+    end
 end
 
 if myHero.charName == "Xerath" then

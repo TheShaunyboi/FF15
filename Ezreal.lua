@@ -194,12 +194,7 @@ end
 
 function Ezreal:OnTick()
     if not LegitOrbwalker:IsAttacking() then
-        self.TS.ValidTarget = function(unit)
-            return IsValidTarget(unit, self.r.range)
-        end
-        local targets = self.TS:update()
-        for i = 1, #targets do
-            local target = targets[i]
+        for target in pairs(self:GetTarget(self.r.range, true)) do
             if self.menu.r:get() then
                 if self:CastR(target) then
                     return
@@ -209,11 +204,8 @@ function Ezreal:OnTick()
                 if self:R(target) then
                     return
                 end
-                self.TS.ValidTarget = function(unit)
-                    return IsValidTarget(unit, self.w.range)
-                end
-                local wTarget = self.TS:update()
-                if wTarget and wTarget[1] and self:CastW(wTarget[1]) then
+                local wTarget = self:GetTarget(self.w.range)
+                if wTarget and self:CastW(wTarget) then
                     return
                 end
                 if self.wBuffTarget and IsValidTarget(self.wBuffTarget, self.q.range) and self:CastQ(self.wBuffTarget) then
@@ -250,6 +242,20 @@ end
 
 function Ezreal:Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
+end
+
+function Ezreal:GetTarget(dist, all)
+    self.TS.ValidTarget = function(unit)
+        return IsValidTarget(unit, dist)
+    end
+    local res = self.TS:update()
+    if all then
+        return res
+    else
+        if res and res[1] then
+            return res[1]
+        end
+    end
 end
 
 if myHero.charName == "Ezreal" then
