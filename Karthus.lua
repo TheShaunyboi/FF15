@@ -21,35 +21,35 @@ function Karthus:__init()
         speed = math.huge,
         range = 875,
         delay = 0.25,
-        width = 125,
-        damage = function(unit)
+        radius = 195,
+      --[[   damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
                 25 + myHero.spellbook:Spell(SpellSlot.Q).level * 20 +
                     0.3 * myHero.characterIntermediate.flatMagicDamageMod
             )
-        end
+        end ]]
     }
     self.w = {
         type = "circular",
         speed = math.huge,
         range = 1000,
-        delay = 0.25,
-        width = 165
+        delay = 0.05,
+        radius = 165
     }
     self.e = {
         range = 425,
         delay = 0.25,
         active = false,
-        damage = function(unit)
+     --[[    damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
                 10 + myHero.spellbook:Spell(SpellSlot.Q).level * 20 +
                     0.2 * myHero.characterIntermediate.flatMagicDamageMod
             )
-        end
+        end ]]
     }
     self.inPassive = false
     self:Menu()

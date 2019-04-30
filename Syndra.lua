@@ -59,6 +59,7 @@ function Syndra:init()
             width = 200
         }
     }
+    self.lastPrint = nil
     self.next = os.clock()
     self.orbs = {}
     self:Menu()
@@ -165,6 +166,11 @@ function Syndra:OnTick()
     for i = #self.orbs, 1, -1 do
         if os.clock() >= self.orbs[i].endT then
             table.remove(self.orbs, i)
+        end
+        local speed = self.orbs[i] and self.orbs[i].obj and self.orbs[i].obj.aiManagerClient.navPath.dashSpeed 
+        if speed > 100 and speed ~= 1200 and speed ~= self.lastPrint then
+            self.lastPrint = speed
+            print(speed)
         end
     end
     if os.clock() >= self.next and self:AutoGrab() then
@@ -497,7 +503,8 @@ function Syndra:CastW2(target)
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
                 GetDistanceSqr(pred.castPosition) <= self.spell.w.rangeSqr
          then
-            --print("Dist = " .. GetDistance(pred.castPosition, grabbedTarget.position))
+            print("Dist = " .. GetDistance(pred.castPosition, grabbedTarget.position))
+            print("Pred speed = " .. self.spell.w.speed)
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
         end
