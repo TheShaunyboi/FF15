@@ -1,9 +1,9 @@
 local Ezreal = {}
 local version = 1
---[[ if tonumber(GetInternalWebResult("Ezreal.version")) > version then
+--[[if tonumber(GetInternalWebResult("Ezreal.version")) > version then
     DownloadInternalFile("Ezreal.lua", SCRIPT_PATH .. "Ezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("Ezreal.version")) .. " Press F5")
-end ]]
+end--]]
 require "FF15Menu"
 require "utils"
 local DreamTS = require("DreamTS")
@@ -38,10 +38,10 @@ function Ezreal:__init()
     self:Menu()
     self.TS =
         DreamTS(
-        self.menu,
+        self.menu.dreamTS,
         {
             ValidTarget = function(unit)
-                return IsValidTarget(unit)
+                return IsValidTarget(unit, self.r.range)
             end,
             Damage = function(unit)
                 return dmgLib:CalculateMagicDamage(myHero, unit, 100)
@@ -78,6 +78,7 @@ end
 
 function Ezreal:Menu()
     self.menu = Menu("asdfezreal", "Ezreal")
+    self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("q", "AutoQ", true, string.byte("T"))
     self.menu:key("r", "Manual R Key", 0x5A)
     self.menu:sub("ezrealDraw", "Draw")
@@ -135,8 +136,9 @@ function Ezreal:CastQ(target)
     if myHero.spellbook:CanUseSpell(0) == 0 then
         local pred = _G.Prediction.GetPrediction(target, self.q, myHero)
         if
-            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
+            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.q.range * self.q.range and
+                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target) or
+                    GetDistanceSqr(pred.castPosition) <= 400 * 400) and
                 not pred:windWallCollision() and
                 not pred:minionCollision()
          then
@@ -174,13 +176,11 @@ function Ezreal:CastR(target)
 end
 
 function Ezreal:R(target)
-    -- ult on CC
-    if _G.Prediction.IsImmobile(target) then
+    if _G.Prediction.IsImmobile(target, GetDistance(target) / self.r.speed + self.r.delay) then
         self:CastR(target)
         return true
     end
     local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
-    -- ult on 3+ hit
     if
         pred and pred.realHitChance > 0 and pred.castPosition and
             (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
@@ -194,7 +194,10 @@ end
 
 function Ezreal:OnTick()
     if not LegitOrbwalker:IsAttacking() then
-        local targets = self.TS:getAll(myHero, self.r.range)
+        self.TS.ValidTarget = function(unit)
+            return IsValidTarget(unit, self.r.range)
+        end
+        local targets = self.TS:update()
         for i = 1, #targets do
             local target = targets[i]
             if self.menu.r:get() then
@@ -206,8 +209,11 @@ function Ezreal:OnTick()
                 if self:R(target) then
                     return
                 end
-                local wTarget = self.TS:get(myHero, self.w.range)
-                if i == 1 and wTarget and self:CastW(wTarget) then
+                self.TS.ValidTarget = function(unit)
+                    return IsValidTarget(unit, self.w.range)
+                end
+                local wTarget = self.TS:update()
+                if wTarget and wTarget[1] and self:CastW(wTarget[1]) then
                     return
                 end
                 if self.wBuffTarget and IsValidTarget(self.wBuffTarget, self.q.range) and self:CastQ(self.wBuffTarget) then
