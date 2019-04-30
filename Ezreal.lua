@@ -41,7 +41,7 @@ function Ezreal:__init()
         self.menu.dreamTs,
         {
             ValidTarget = function(unit)
-                return IsValidTarget(unit, self.r.range)
+                return _G.Prediction.IsValidTarget(unit, self.r.range)
             end,
             Damage = function(unit)
                 return dmgLib:CalculateMagicDamage(myHero, unit, 100)
@@ -208,14 +208,14 @@ function Ezreal:OnTick()
                 if wTarget and self:CastW(wTarget) then
                     return
                 end
-                if self.wBuffTarget and IsValidTarget(self.wBuffTarget, self.q.range) and self:CastQ(self.wBuffTarget) then
+                if self.wBuffTarget and _G.Prediction.IsValidTarget(self.wBuffTarget, self.q.range) and self:CastQ(self.wBuffTarget) then
                     return
                 end
                 if self:CastQ(target) then
                     return
                 end
             elseif self.menu.q:get() and not _G.Prediction.IsRecalling(myHero) then
-                if self.wBuffTarget and IsValidTarget(self.wBuffTarget, self.q.range) then
+                if self.wBuffTarget and _G.Prediction.IsValidTarget(self.wBuffTarget, self.q.range) then
                     self:CastQ(self.wBuffTarget)
                 end
                 if self:CastQ(target) then
@@ -246,7 +246,7 @@ end
 
 function Ezreal:GetTarget(dist, all)
     self.TS.ValidTarget = function(unit)
-        return IsValidTarget(unit, dist)
+        return _G.Prediction.IsValidTarget(unit, dist)
     end
     local res = self.TS:update()
     if all then
