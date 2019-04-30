@@ -15,6 +15,8 @@ function OnLoad()
     end
 end
 
+local Vector = require("GeometryLib").Vector
+
 function Xerath:__init()
     self.q = {
         type = "linear",
@@ -134,6 +136,27 @@ function Xerath:Menu()
     self.menu.xerathDraw.r:slider("rb", "Blue", 1, 255, 150)
 end
 
+local function DrawMinimapCircle(pos3d, radius, color)
+    pos3d = Vector(pos3d)
+    local pts = {}
+    local dir = pos3d:normalized()
+
+    for angle = 0, 360, 15 do
+        local pos = TacticalMap:WorldToMinimap((pos3d + dir:RotatedAngle(angle) * radius):toDX3())
+        if pos.x ~= 0 then
+            pts[#pts + 1] = pos
+        end
+    end
+
+    for i = 1, #pts - 1 do
+        DrawHandler:Line(
+            pts[i],
+            pts[i + 1],
+            color
+        )
+    end
+end
+
 function Xerath:OnDraw()
     if self.menu.xerathDraw.q.q:get() then
         local isQActive, remainingTime = self:IsQActive()
@@ -161,14 +184,15 @@ function Xerath:OnDraw()
         self.menu.xerathDraw.r.rg:get(),
         self.menu.xerathDraw.r.rb:get()
     )
-    if myHero.spellbook:Spell(3).level > 0 then
+    if myHero.spellbook:Spell(SpellSlot.R).level > 0 then
         self.r.range = self:GetRRange()
         if self.menu.xerathDraw.r.r:get() then
             DrawHandler:Circle3D(myHero.position, self.r.range, color)
         end
         if self.menu.xerathDraw.r.rmini:get() then
             local radius = TacticalMap.width * self.r.range / 14692
-            DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
+            DrawMinimapCircle(myHero, self.r.range, color)
+            --DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
         end
     end
     if self:IsRActive() then
@@ -293,7 +317,7 @@ function Xerath:OnTick()
     end
     for _, target in ipairs(self:GetTarget(self.e.range, true)) do
         if self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() then
-            _, canHit = _G.Prediction.IsDashing(target, self.e, myHero)
+            local _, canHit = _G.Prediction.IsDashing(target, self.e, myHero)
             if canHit then
                 self:CastE(target)
             end
