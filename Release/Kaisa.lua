@@ -1,9 +1,9 @@
 local Kaisa = {}
 local version = 1
---[[ if tonumber(GetInternalWebResult("Kaisa.version")) > version then
+if tonumber(GetInternalWebResult("Kaisa.version")) > version then
     DownloadInternalFile("Kaisa.lua", SCRIPT_PATH .. "Kaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("Kaisa.version")) .. " Press F5")
-end ]]
+end
 require "FF15Menu"
 require "utils"
 

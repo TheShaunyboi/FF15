@@ -174,17 +174,13 @@ function Ezreal:CastR(target)
 end
 
 function Ezreal:R(target)
-    if
-        target.buffManager:HasBuffOfType(5) or target.buffManager:HasBuffOfType(8) or
-            target.buffManager:HasBuffOfType(24) or
-            target.buffManager:HasBuffOfType(11) or
-            target.buffManager:HasBuffOfType(22) or
-            target.buffManager:HasBuffOfType(21)
-     then
+    -- ult on CC
+    if _G.Prediction.IsImmobile(target) then
         self:CastR(target)
         return true
     end
     local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
+    -- ult on 3+ hit
     if
         pred and pred.realHitChance > 0 and pred.castPosition and
             (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
