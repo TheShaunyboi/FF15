@@ -128,7 +128,8 @@ function Syndra:Menu()
     self.menu.use:checkbox("we", "Use WE", true)
     self.menu.use:checkbox("e", "Use E", true)
     self.menu.use:checkbox("qe1", "Use QE Short", true)
-    self.menu.use:checkbox("qe2", "Use QE Long", true)
+    self.menu.use:checkbox("qe2", "Use QE Long", true, string.byte("Z"))
+    self.menu:checkbox("e", "AutoE", true, string.byte("T"))
     self.menu:sub("antigap", "Anti Gapclose")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
         self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
@@ -158,8 +159,6 @@ function Syndra:Menu()
     self.menu.syndraDraw.e:slider("eg", "Green", 1, 255, 150)
     self.menu.syndraDraw.e:slider("eb", "Blue", 1, 255, 150)
     self.menu.syndraDraw:checkbox("qe", "Orb", true)
-
-    self.menu:checkbox("e", "AutoE", true, string.byte("T"))
 end
 
 function Syndra:OnTick()
@@ -204,28 +203,23 @@ function Syndra:OnTick()
             if self.menu.e:get() and not _G.Prediction.IsRecalling(myHero) then
                 if self:CastE(target) then
                     self.next = os.clock() + 0.05
-                    print("E")
                     return
                 end
             end
             if LegitOrbwalker:GetMode() == "Combo" then
                 if self:CastR(target) then
                     self.next = os.clock() + 0.05
-                    print("R")
                     return
                 end
                 if self.menu.use.e:get() and self:CastE(target) then
-                    print("E")
                     self.next = os.clock() + 0.05
                     return
                 end
                 if self.menu.use.we:get() and self:CastWE(target) then
-                    print("WE")
                     self.next = os.clock() + 0.6
                     return
                 end
                 if self.menu.use.qe1:get() and self:CastQEShort(target) then
-                    print("QEShort")
                     self.next = os.clock() + 0.6
                     return
                 end
@@ -234,12 +228,10 @@ function Syndra:OnTick()
         local target = self:GetTarget(self.spell.w.range)
         if target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
             if self.menu.use.w2:get() and target and self:CastW2(target) then
-                print("W2")
                 self.next = os.clock() + 0.05
                 return
             end
             if self.menu.use.w1:get() and target and self:CastW1() then
-                print("W1")
                 self.next = os.clock() + 0.05
                 return
             end
@@ -250,7 +242,6 @@ function Syndra:OnTick()
                 self.menu.use.qe2:get() and
                 self:CastQELong(target)
          then
-            print("QELong")
             self.next = os.clock() + 0.05
             return
         end
@@ -259,7 +250,6 @@ function Syndra:OnTick()
             if LegitOrbwalker:GetMode() == "Combo" and self.menu.use.q:get() then
                 if self:CastQ(target) then
                     self.next = os.clock() + 0.05
-                    print("Q")
                     return
                 end
             elseif LegitOrbwalker:GetMode() == "Harass" then
@@ -336,16 +326,24 @@ function Syndra:OnDraw()
             DrawHandler:Circle3D(obj.position, 45, Color.Green)
         end
     end
+    local text =
+        (self.menu.use.qe2:get() and "QE Long: On" or "QE Long: Off") ..
+        "\n" .. (self.menu.e:get() and "Auto E: On" or "Auto E: Off")
+    DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
 
 function Syndra:AutoGrab()
     if
         myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and
             myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and
-            not _G.Prediction.IsRecalling(myHero) and os.clock() >= self.spell.w.next1
+            not _G.Prediction.IsRecalling(myHero) and
+            os.clock() >= self.spell.w.next1
      then
         for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
-            if (minion.name == "Tibbers" or minion.name == "IvernMinion") and GetDistanceSqr(minion) < self.spell.w.rangeSqr then
+            if
+                (minion.name == "Tibbers" or minion.name == "IvernMinion") and
+                    GetDistanceSqr(minion) < self.spell.w.rangeSqr
+             then
                 myHero.spellbook:CastSpell(SpellSlot.W, minion.position)
                 self.spell.w.next1 = os.clock() + 0.2
                 return true
