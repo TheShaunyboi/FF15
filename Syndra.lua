@@ -188,7 +188,7 @@ function Syndra:OnTick()
         return
     end
     if os.clock() >= self.next then
-        for target in pairs(self:GetTarget(self.spell.qe.range + 50, true)) do
+        for _, target in ipairs(self:GetTarget(self.spell.qe.range + 50, true)) do
             if
                 self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() and
                     not _G.Prediction.IsRecalling(myHero)

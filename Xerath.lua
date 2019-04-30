@@ -249,7 +249,7 @@ function Xerath:CastR()
     if myHero.spellbook:CanUseSpell(3) == 0 and self.menu.tap:get() then
         local targets = self:GetTarget(self.r.range, true)
         local targetMouse, targetGen = nil, nil
-        for target in pairs(targets) do
+        for _, target in ipairs(targets) do
             if not targetGen then
                 targetGen = target
             end
@@ -291,7 +291,7 @@ function Xerath:OnTick()
             return
         end
     end
-    for target in pairs(self:GetTarget(self.e.range, true)) do
+    for _, target in ipairs(self:GetTarget(self.e.range, true)) do
         if self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() then
             _, canHit = _G.Prediction.IsDashing(target, self.e, myHero)
             if canHit then

@@ -194,7 +194,7 @@ end
 
 function Ezreal:OnTick()
     if not LegitOrbwalker:IsAttacking() then
-        for target in pairs(self:GetTarget(self.r.range, true)) do
+        for _, target in ipairs(self:GetTarget(self.r.range, true)) do
             if self.menu.r:get() then
                 if self:CastR(target) then
                     return
