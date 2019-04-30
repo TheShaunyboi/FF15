@@ -16,12 +16,14 @@
 ### Syndra
 * Uses Dream TS
 * Proper QE short support
+* W1 grabs oldest orb or else lowest health minion
 * Variable W2 prediction based on grabbed target
 * Proper WE support
 * E orb pingpong
 * Anti-gapcloser WE/QE
 * Tracks orbs pre initialization
 * Advanced ult logic with 8 customizable checks and ignite support
+* Auto grab Annie / Ivern ults
 
 ### Xerath
 * Uses Dream TS
