@@ -2,6 +2,7 @@
 
 ## Supported Champions
 ### Ezreal
+* Uses Dream TS
 * Auto Q
 * Prioritize W buff target
 * Manual ult
@@ -13,6 +14,7 @@
 * W if near mouse, in AA range, or CCed
 
 ### Syndra
+* Uses Dream TS
 * Proper QE short support
 * W1 grabs oldest orb or else lowest health minion
 * Variable W2 prediction based on grabbed target
@@ -24,7 +26,8 @@
 * Auto grab Annie / Ivern ults
 
 ### Xerath
+* Uses Dream TS
 * Separate prediction for W center
 * Anti-gapcloser E
 * R minimap drawings
-* R on tap with near mouse priority
+* R on tap with near mouse prioritity
