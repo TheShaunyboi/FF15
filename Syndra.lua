@@ -695,7 +695,7 @@ function Syndra:CastWE(target)
                         os.clock() + self.spell.w.delay +
                         dist / (dist * self.spell.w.distanceMult + self.spell.w.baseSpeed)
                     self.spell.e.width = self.spell.e.widthMax
-                    if os.clock() + self.spell.e.delay + GetDistance(wPos) / self.spell.e.speed - wIntercept <= 0.3 then
+                    if os.clock() + self.spell.e.delay + GetDistance(wPos) / self.spell.e.speed - wIntercept <= 0.1 then
                         myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition):toDX3())
                         self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.05}
                         self.spell.w.next2 = os.clock() + 1
