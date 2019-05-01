@@ -20,9 +20,9 @@ function Karthus:__init()
         type = "circular",
         speed = math.huge,
         range = 875,
-        delay = 0.25,
-        radius = 195,
-      --[[   damage = function(unit)
+        delay = 1.05,
+        radius = 195
+        --[[   damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
@@ -35,14 +35,13 @@ function Karthus:__init()
         type = "circular",
         speed = math.huge,
         range = 1000,
-        delay = 0.05,
+        delay = 0.50,
         radius = 165
     }
     self.e = {
-        range = 425,
-        delay = 0.25,
-        active = false,
-     --[[    damage = function(unit)
+        range = 500,
+        active = false
+        --[[    damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
@@ -58,7 +57,7 @@ function Karthus:__init()
         self.menu.dreamTs,
         {
             ValidTarget = function(unit)
-                return _G.Prediction.IsValidTarget(unit, self.r.range)
+                return _G.Prediction.IsValidTarget(unit)
             end,
             Damage = function(unit)
                 return dmgLib:CalculateMagicDamage(myHero, unit, 100)
@@ -116,6 +115,8 @@ function Karthus:OnDraw()
             )
         )
     end
+    local text = "" 
+    DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
 
 function Karthus:CastQ(target)
@@ -146,11 +147,11 @@ end
 function Karthus:ToggleE()
     if myHero.spellbook:CanUseSpell(2) == 0 then
         if self:GetTarget(self.e.range) then
-            if not self.e.active then
+            if myHero.spellbook:Spell(2).toggleState == 1 then
                 myHero.spellbook:CastSpell(2, pwHud.hudManager.virtualCursorPos)
             end
         else
-            if self.e.active then
+            if myHero.spellbook:Spell(2).toggleState == 2 then
                 myHero.spellbook:CastSpell(2, pwHud.hudManager.virtualCursorPos)
             end
         end
@@ -162,14 +163,14 @@ end
 
 function Karthus:OnTick()
     local target = self:GetTarget(self.q.range)
+    if LegitOrbwalker:GetMode() == "Combo" then
+        self:ToggleE()
+    end
     if target then
-        if self.inPassive and self:CastQ(target) or self:CastW(target) then
+        if false and self:CastQ(target) --[[or self:CastW(target)--]] then
             return
-        elseif LegitOrbwalker:GetMode() == "Combo" then
-            self:ToggleE()
-            if self:CastQ(target) or self:CastW(target) then
-                return
-            end
+        elseif LegitOrbwalker:GetMode() == "Combo" and (self:CastQ(target) or self:CastW(target)) then
+            return
         elseif LegitOrbwalker:GetMode() == "Harass" and self:CastQ(target) then
             return
         elseif LegitOrbwalker:GetMode() == "Lasthit" then
@@ -182,8 +183,6 @@ function Karthus:OnBuffGain(obj, buff)
     if obj and obj == myHero then
         if buff.name == "karthusdead" then
             self.inPassive = true
-        elseif buff.name == "karthuse" then
-            self.e.active = true
         end
     end
 end
@@ -192,8 +191,6 @@ function Karthus:OnBuffLost(obj, buff)
     if obj and obj == myHero then
         if buff.name == "karthusdead" then
             self.inPassive = false
-        elseif buff.name == "karthuse" then
-            self.e.active = false
         end
     end
 end
