@@ -20,37 +20,39 @@ function Karthus:__init()
         type = "circular",
         speed = math.huge,
         range = 875,
-        delay = 1.05,
-        radius = 195
-        --[[   damage = function(unit)
+        delay = 0.95,
+        radius = 190,
+        damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
                 25 + myHero.spellbook:Spell(SpellSlot.Q).level * 20 +
                     0.3 * myHero.characterIntermediate.flatMagicDamageMod
             )
-        end ]]
+        end
     }
     self.w = {
         type = "circular",
         speed = math.huge,
         range = 1000,
-        delay = 0.50,
-        radius = 165
+        delay = 0.4,
+        radius = 80
     }
     self.e = {
         range = 500,
-        active = false
-        --[[    damage = function(unit)
+        active = false,
+        damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
-                10 + myHero.spellbook:Spell(SpellSlot.Q).level * 20 +
+                10 + myHero.spellbook:Spell(SpellSlot.E).level * 20 +
                     0.2 * myHero.characterIntermediate.flatMagicDamageMod
             )
-        end ]]
+        end
     }
-    self.inPassive = false
+    self.passiveLast = 0
+    self.AAs = {}
+    self.Qlast = {}
     self:Menu()
     self.TS =
         DreamTS(
@@ -88,12 +90,25 @@ function Karthus:__init()
             self:OnBuffLost(obj, buff)
         end
     )
+    AddEvent(
+        Events.OnCreateObject,
+        function(object, nId)
+            self:OnCreateObject(object, nId)
+        end
+    )
+    AddEvent(
+        Events.OnDeleteObject,
+        function(object)
+            self:OnDeleteObject(object)
+        end
+    )
     PrintChat("Karthus loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
 function Karthus:Menu()
     self.menu = Menu("asdfkarthus", "Karthus")
+    self.menu:checkbox("aQ", "Always use Q to lasthit", true)
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("karthusDraw", "Draw")
     self.menu.karthusDraw:checkbox("q", "Q", true)
@@ -115,7 +130,10 @@ function Karthus:OnDraw()
             )
         )
     end
-    local text = "" 
+    local text = ""
+    if os.clock() <= self.passiveLast + 7 then
+        text = text .. "Time to ult: " .. 4 - os.clock() + self.passiveLast
+    end
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
 
@@ -159,38 +177,83 @@ function Karthus:ToggleE()
 end
 
 function Karthus:Lasthit()
+    for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
+        if
+            GetDistanceSqr(minion) <= self.q.range * self.q.range and (self.menu.aQ:get() or GetDistanceSqr(minion) >= self.e.range * self.e.range) and LegitOrbwalker:HpPred(minion, self.q.delay) > 0 and
+                LegitOrbwalker:HpPred(minion, self.q.delay) - self.q.damage(minion) < 0 and
+                not self.AAs[minion] and
+                not self.Qlast[minion] and
+                self:CastQ(minion)
+         then
+            self.Qlast[minion] = os.clock() + self.q.delay + NetClient.ping / 1000
+            return
+        elseif
+            GetDistanceSqr(minion) <= self.e.range * self.e.range and minion.health > 0 and
+                minion.health - self.e.damage(minion) < 0 and
+                not self.AAs[minion] and
+                not self.Qlast[minion]
+         then
+            if myHero.spellbook:CanUseSpell(2) == 0 and myHero.spellbook:Spell(2).toggleState == 1 then
+                myHero.spellbook:CastSpell(2, pwHud.hudManager.virtualCursorPos)
+                return
+            end
+        end
+    end
+    if myHero.spellbook:CanUseSpell(2) == 0 and myHero.spellbook:Spell(2).toggleState == 2 then
+        myHero.spellbook:CastSpell(2, pwHud.hudManager.virtualCursorPos)
+    end
 end
 
 function Karthus:OnTick()
+    for minion in pairs(self.Qlast) do
+        if self.Qlast[minion] >= os.clock() then
+            self.Qlast[minion] = nil
+        end
+    end
     local target = self:GetTarget(self.q.range)
     if LegitOrbwalker:GetMode() == "Combo" then
         self:ToggleE()
+        if myHero.spellbook:CanUseSpell(0) == 0 then
+            LegitOrbwalker:BlockAttack(true)
+        end
+    else
+        LegitOrbwalker:BlockAttack(false)
     end
     if target then
-        if false and self:CastQ(target) --[[or self:CastW(target)--]] then
+        if os.clock() <= self.passiveLast + 7 and (self:CastW(target) or self:CastQ(target)) then
             return
-        elseif LegitOrbwalker:GetMode() == "Combo" and (self:CastQ(target) or self:CastW(target)) then
+        elseif LegitOrbwalker:GetMode() == "Combo" and (self:CastW(target) or self:CastQ(target)) then
             return
         elseif LegitOrbwalker:GetMode() == "Harass" and self:CastQ(target) then
             return
-        elseif LegitOrbwalker:GetMode() == "Lasthit" then
-            self:Lasthit()
         end
+    end
+    if LegitOrbwalker:GetMode() == "Lasthit" then
+        self:Lasthit()
     end
 end
 
 function Karthus:OnBuffGain(obj, buff)
     if obj and obj == myHero then
-        if buff.name == "karthusdead" then
-            self.inPassive = true
+        if buff.name == "KarthusDeathDefiedBuff" then
+            self.passiveLast = os.clock()
         end
     end
 end
 
 function Karthus:OnBuffLost(obj, buff)
-    if obj and obj == myHero then
-        if buff.name == "karthusdead" then
-            self.inPassive = false
+end
+
+function Karthus:OnCreateObject(object, nId)
+    if object and object.name:find("KarthusBasicAttack") and object.asMissile.spellCaster.networkId == myHero.networkId then
+        self.AAs[object.asMissile.target] = nil
+    end
+end
+
+function Karthus:OnDeleteObject(object)
+    for target in pairs(self.AAs) do
+        if self.AAs[target] == object then
+            self.AAs[target] = nil
         end
     end
 end

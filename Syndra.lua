@@ -23,7 +23,7 @@ function Syndra:init()
         q = {
             type = "circular",
             range = 800,
-            delay = 0.75,
+            delay = 0.70,
             radius = 200,
             speed = math.huge
         },
@@ -54,7 +54,7 @@ function Syndra:init()
             pingPongSpeed = 2000,
             range = 1200,
             rangeSqr = 1200 * 1200,
-            delay = 0.35,
+            delay = 0.30,
             speed = 2000,
             width = 200
         }
@@ -345,7 +345,7 @@ function Syndra:AutoGrab()
                     GetDistanceSqr(minion) < self.spell.w.rangeSqr
              then
                 myHero.spellbook:CastSpell(SpellSlot.W, minion.position)
-                self.spell.w.next1 = os.clock() + 0.2
+                self.spell.w.next1 = os.clock() + self.spell.w.delay
                 return true
             end
         end
@@ -410,11 +410,11 @@ function Syndra:CastW1()
             myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and
             os.clock() >= self.spell.w.next1
      then
-        if LegitOrbwalker:GetTarget(self.spell.w.range, "AP", myHero) then
+        if self:GetTarget(self.spell.w.range) then
             local target = self:GetGrabTarget()
             if target then
                 myHero.spellbook:CastSpell(SpellSlot.W, target.position)
-                self.spell.w.next1 = os.clock() + 0.2
+                self.spell.w.next1 = os.clock() + self.spell.w.delay
                 return true
             end
         end
@@ -589,6 +589,7 @@ function Syndra:CastE(target)
                 if _G.Prediction.IsCollision(new_E_spell, myHero, orb.obj.position, target) then
                     local castPos = Vector(myHero.position):extended(Vector(orb.obj.position), 300):toDX3()
                     myHero.spellbook:CastSpell(SpellSlot.E, castPos)
+                    self.spell.w.next2 = os.clock() + 1
                     return true
                 end
             end
