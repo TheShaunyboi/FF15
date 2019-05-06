@@ -20,8 +20,8 @@ function Karthus:__init()
         type = "circular",
         speed = math.huge,
         range = 875,
-        delay = 0.95,
-        radius = 190,
+        delay = 1.02,
+        radius = 195,
         damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
@@ -42,12 +42,21 @@ function Karthus:__init()
         range = 500,
         active = false,
         damage = function(unit)
+            local mult = 1
+            local pred = _G.Prediction.GetPrediction(unit, self.q, myHero)
+            if
+                pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.q.range * self.q.range and
+                    not pred:minionCollision() and
+                    not pred:heroCollision()
+             then
+                mult = 2
+            end
             return dmgLib:CalculateMagicDamage(
                 myHero,
                 unit,
                 10 + myHero.spellbook:Spell(SpellSlot.E).level * 20 +
                     0.2 * myHero.characterIntermediate.flatMagicDamageMod
-            )
+            ) * mult
         end
     }
     self.passiveLast = 0
@@ -82,12 +91,6 @@ function Karthus:__init()
         Events.OnBuffGain,
         function(obj, buff)
             self:OnBuffGain(obj, buff)
-        end
-    )
-    AddEvent(
-        Events.OnBuffLost,
-        function(obj, buff)
-            self:OnBuffLost(obj, buff)
         end
     )
     AddEvent(
@@ -132,7 +135,12 @@ function Karthus:OnDraw()
     end
     local text = ""
     if os.clock() <= self.passiveLast + 7 then
-        text = text .. "Time to ult: " .. 4 - os.clock() + self.passiveLast
+        text = text .. "Time to ult: " .. 4 - os.clock() + self.passiveLast .. "\n"
+    end
+    if myHero.spellbook:CanUseSpell(3) == 0 then
+        for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+            text = text .. enemy.charName .. ": " .. enemy.health - self:GetRDamage(enemy) .. "\n"
+        end
     end
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
@@ -176,11 +184,21 @@ function Karthus:ToggleE()
     end
 end
 
+function Karthus:GetRDamage()
+    return dmgLib:CalculateMagicDamage(
+        myHero,
+        unit,
+        100 + myHero.spellbook:Spell(SpellSlot.R).level * 150 + 0.75 * myHero.characterIntermediate.flatMagicDamageMod
+    )
+end
+
 function Karthus:Lasthit()
     for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
         if
-            GetDistanceSqr(minion) <= self.q.range * self.q.range and (self.menu.aQ:get() or GetDistanceSqr(minion) >= self.e.range * self.e.range) and LegitOrbwalker:HpPred(minion, self.q.delay) > 0 and
-                LegitOrbwalker:HpPred(minion, self.q.delay) - self.q.damage(minion) < 0 and
+            _G.Prediction.IsValidTarget(minion) and GetDistanceSqr(minion) <= self.q.range * self.q.range and
+                (self.menu.aQ:get() or GetDistanceSqr(minion) >= self.e.range * self.e.range) and
+                LegitOrbwalker:HpPred(minion, self.q.delay) > 0 and
+                minion.health - self.q.damage(minion) < 0 and
                 not self.AAs[minion] and
                 not self.Qlast[minion] and
                 self:CastQ(minion)
@@ -188,7 +206,8 @@ function Karthus:Lasthit()
             self.Qlast[minion] = os.clock() + self.q.delay + NetClient.ping / 1000
             return
         elseif
-            GetDistanceSqr(minion) <= self.e.range * self.e.range and minion.health > 0 and
+            _G.Prediction.IsValidTarget(minion) and GetDistanceSqr(minion) <= self.e.range * self.e.range and
+                minion.health > 0 and
                 minion.health - self.e.damage(minion) < 0 and
                 not self.AAs[minion] and
                 not self.Qlast[minion]
@@ -213,8 +232,13 @@ function Karthus:OnTick()
     local target = self:GetTarget(self.q.range)
     if LegitOrbwalker:GetMode() == "Combo" then
         self:ToggleE()
-        if myHero.spellbook:CanUseSpell(0) == 0 then
+        if
+            myHero.spellbook:CanUseSpell(0) == 0 and target and
+                self.q.damage(target) >= 1.5 * dmgLib:GetAutoAttackDamage(myHero, target)
+         then
             LegitOrbwalker:BlockAttack(true)
+        else
+            LegitOrbwalker:BlockAttack(false)
         end
     else
         LegitOrbwalker:BlockAttack(false)
@@ -222,9 +246,12 @@ function Karthus:OnTick()
     if target then
         if os.clock() <= self.passiveLast + 7 and (self:CastW(target) or self:CastQ(target)) then
             return
-        elseif LegitOrbwalker:GetMode() == "Combo" and (self:CastW(target) or self:CastQ(target)) then
+        elseif
+            LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and
+                (self:CastW(target) or self:CastQ(target))
+         then
             return
-        elseif LegitOrbwalker:GetMode() == "Harass" and self:CastQ(target) then
+        elseif LegitOrbwalker:GetMode() == "Harass" and not LegitOrbwalker:IsAttacking() and self:CastQ(target) then
             return
         end
     end
@@ -239,9 +266,6 @@ function Karthus:OnBuffGain(obj, buff)
             self.passiveLast = os.clock()
         end
     end
-end
-
-function Karthus:OnBuffLost(obj, buff)
 end
 
 function Karthus:OnCreateObject(object, nId)
