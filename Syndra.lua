@@ -7,6 +7,9 @@ end--]]
 require "FF15Menu"
 require "utils"
 
+--fix spell queue
+--adjust 
+
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
 local dmgLib = require("FF15DamageLib")
@@ -34,8 +37,8 @@ function Syndra:init()
             delay = 0.25,
             radius = 220,
             speed = 1200,
-            distanceMult = 1.1,
-            baseSpeed = 250,
+            distanceMult = 0.95,
+            baseSpeed = 300,
             next1 = os.clock(),
             next2 = os.clock()
         },
@@ -124,6 +127,11 @@ function Syndra:Menu()
     self.menu.use:checkbox("e", "Use E", true)
     self.menu.use:checkbox("qe1", "Use QE Short", true)
     self.menu.use:checkbox("qe2", "Use QE Long", true, string.byte("Z"))
+    self.menu:sub("w", "W Prediction")
+    self.menu.w:slider("b", "Base Speed", 0, 1000, 300)
+    self.menu.w:slider("m", "Distance Multiplier", 0, 2, 0.95, 0.05)
+
+
     self.menu:checkbox("e", "AutoE", true, string.byte("T"))
     self.menu:sub("antigap", "Anti Gapclose")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
@@ -374,10 +382,6 @@ function Syndra:CastQ(target)
     end
 end
 
-local function IsBallHitByE(obj)
-    return obj.aiManagerClient and obj.aiManagerClient.navPath.isMoving and
-        obj.aiManagerClient.navPath.dashSpeed == 2000
-end
 
 function Syndra:GetGrabTarget()
     local lowTime = math.huge
@@ -385,7 +389,7 @@ function Syndra:GetGrabTarget()
     for i = 1, #self.orbs do
         local orb = self.orbs[i]
         if
-            orb.isInitialized and orb.endT < lowTime and not IsBallHitByE(orb.obj) and
+            orb.isInitialized and orb.endT < lowTime and
                 GetDistance(orb.obj.position) <= self.spell.w.range
          then
             lowTime = orb.endT
@@ -469,10 +473,7 @@ function Syndra:GetTargetHeld()
     for i = 1, #self.orbs do
         local orb = self.orbs[i]
 
-        if
-            orb.isInitialized and orb.obj and orb.obj.aiManagerClient and orb.obj.aiManagerClient.navPath.isMoving --and
-                --not IsBallHitByE(orb.obj)
-         then
+        if orb.isInitialized and orb.obj and orb.obj.aiManagerClient and orb.obj.aiManagerClient.navPath.isMoving then
             return orb.obj, true
         end
     end
@@ -491,14 +492,14 @@ function Syndra:CastW2(target)
 
     if myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and os.clock() >= self.spell.w.next2 then
         self.spell.w.speed =
-            GetDistance(grabbedTarget, target.position) * self.spell.w.distanceMult + self.spell.w.baseSpeed
+            GetDistance(grabbedTarget, target.position) * self.menu.w.m:get() + self.menu.w.b:get()
 
         local pred = _G.Prediction.GetPrediction(target, self.spell.w, grabbedTarget)
         for i = 0, 20, 1 do
             pred = _G.Prediction.GetPrediction(target, self.spell.w, grabbedTarget)
             if pred and pred.castPosition then
                 self.spell.w.speed =
-                    GetDistance(grabbedTarget, pred.castPosition) * self.spell.w.distanceMult + self.spell.w.baseSpeed
+                    GetDistance(grabbedTarget, pred.castPosition) * self.menu.w.m:get() + self.menu.w.b:get()
             end
         end
 
@@ -507,7 +508,7 @@ function Syndra:CastW2(target)
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
                 GetDistanceSqr(pred.castPosition) <= self.spell.w.rangeSqr
          then
-            print(GetDistance(grabbedTarget, target.position) * self.spell.w.distanceMult + self.spell.w.baseSpeed)
+            print(GetDistance(grabbedTarget, target.position) *self.menu.w.m:get() + self.menu.w.b:get())
             print(self.spell.w.speed)
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
@@ -522,7 +523,7 @@ function Syndra:CanEQ(qPos, predPos, target)
         if
             orb.isInitialized and GetDistance(target.position) >= GetDistance(orb.obj.position) and
                 math.abs(Vector(myHero.position):angleBetween(Vector(orb.obj.position), qPos)) <=
-                    ((myHero.spellbook:Spell(SpellSlot.E).level < 5) and 22.5 or 37.5)
+                    ((myHero.spellbook:Spell(SpellSlot.E).level < 5) and 20 or 30)
          then
             seg = LineSegment(extendPos, Vector(myHero.position))
             if seg and seg:distanceTo(Vector(predPos)) <= self.spell.qe.width + target.boundingRadius + 15 then
@@ -566,7 +567,7 @@ function Syndra:CastE(target)
         for i = 1, #self.orbs do
             local orb = self.orbs[i]
             local distToOrb = GetDistance(orb.obj.position)
-            if distToOrb <= self.spell.e.range then
+            --[[ if distToOrb <= self.spell.e.range then
                 local timeToHitOrb = self.spell.e.delay + (distToOrb / self.spell.e.speed)
                 local expectedHitTime = os.clock() + timeToHitOrb - 0.1
                 local canHitOrb =
@@ -604,6 +605,23 @@ function Syndra:CastE(target)
                     self.spell.w.next1 = os.clock() + 1
                     self.spell.w.next2 = os.clock() + 0.7
                     return true
+                end
+            end ]]
+            if distToOrb <= self.spell.q.range - 25 then
+                local timeToHitOrb = self.spell.e.delay + (distToOrb / self.spell.e.speed)
+                local expectedHitTime = os.clock() + timeToHitOrb - 0.1
+                local canHitOrb =
+                    (orb.isInitialized and (expectedHitTime + 0.1 < orb.endT) or (expectedHitTime > orb.endT)) and
+                    (not orb.isInitialized or
+                        (orb.obj and orb.obj.aiManagerClient and not orb.obj.aiManagerClient.navPath.isMoving)) and
+                    orb.obj ~= self:GetTargetHeld()
+                if canHitOrb then
+                    self:CalcQE(target, distToOrb)
+                    local endPos = Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range)
+                    if _G.Prediction.IsCollision(self.spell.qe, myHero, endPos, target) then
+                        myHero.spellbook:CastSpell(SpellSlot.E, orb.obj.position)
+                        return true
+                    end
                 end
             end
         end
@@ -708,7 +726,7 @@ function Syndra:CastWE(target)
                     local dist = GetDistance(grabbedTarget, wPos)
                     local wIntercept =
                         os.clock() + self.spell.w.delay +
-                        dist / (dist * self.spell.w.distanceMult + self.spell.w.baseSpeed)
+                        dist / (dist * self.menu.w.m:get() + self.menu.w.b:get())
                     self.spell.e.width = self.spell.e.widthMax
                     if os.clock() + self.spell.e.delay + GetDistance(wPos) / self.spell.e.speed - wIntercept <= 0.1 then
                         myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition):toDX3())
