@@ -136,7 +136,7 @@ function Xerath:Menu()
     self.menu.xerathDraw.r:slider("rb", "Blue", 1, 255, 150)
 end
 
-local function DrawMinimapCircle(pos3d, radius, color)
+function Xerath:DrawMinimapCircle(pos3d, radius, color)
     pos3d = Vector(pos3d)
     local pts = {}
     local dir = pos3d:normalized()
@@ -191,7 +191,7 @@ function Xerath:OnDraw()
         end
         if self.menu.xerathDraw.r.rmini:get() then
             local radius = TacticalMap.width * self.r.range / 14692
-            DrawMinimapCircle(myHero, self.r.range, color)
+            self:DrawMinimapCircle(myHero, self.r.range, color)
             --DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
         end
     end
