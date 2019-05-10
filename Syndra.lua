@@ -7,8 +7,9 @@ end--]]
 require "FF15Menu"
 require "utils"
 
---fix spell queue
---adjust
+--adjust WE so it always stuns
+--checks for antigapcloser
+--adjust widthmax
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
@@ -128,7 +129,7 @@ function Syndra:Menu()
     self.menu.use:checkbox("qe1", "Use QE Short", true)
     self.menu.use:checkbox("qe2", "Use QE Long", true, string.byte("Z"))
     self.menu:sub("w", "W Prediction")
-    self.menu.w:slider("b", "Base Speed", 0, 1000, 300)
+    self.menu.w:slider("b", "Base Speed", 0, 1000, 300, 25)
     self.menu.w:slider("m", "Distance Multiplier", 0, 2, 0.95, 0.05)
 
     self.menu:checkbox("e", "AutoE", true, string.byte("T"))
@@ -507,19 +508,6 @@ end
 
 function Syndra:CanEQ(qPos, predPos, target)
     --e orb check
-    for i = 1, #self.orbs do
-        local orb = self.orbs[i]
-        if
-            orb.isInitialized and GetDistance(target.position) >= GetDistance(orb.obj.position) and
-                math.abs(Vector(myHero.position):angleBetween(Vector(orb.obj.position), qPos)) <=
-                    ((myHero.spellbook:Spell(SpellSlot.E).level < 5) and 20 or 30)
-         then
-            seg = LineSegment(extendPos, Vector(myHero.position))
-            if seg and seg:distanceTo(Vector(predPos)) <= self.spell.qe.width + target.boundingRadius + 15 then
-                return false
-            end
-        end
-    end
     --wall check
     local interval = 50
     local count = math.floor(GetDistance(predPos, qPos:toDX3()) / interval)
@@ -623,15 +611,6 @@ function Syndra:CastQEShort(target)
             myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and
             myHero.mana >= 80 + 10 * myHero.spellbook:Spell(0).level
      then
-        --[[
-            qe = {
-            pingPongSpeed = 2500,
-            range = 1250,
-            delay = 0.25,
-            speed = 2500,
-            width = 200
-        }
-        ]]
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range then
             --qe short
@@ -691,7 +670,7 @@ local pred = _G.Prediction.GetPrediction(target, new_QE_spell, myHero) ]]
 end
 
 function Syndra:GetQPos(predPos)
-    return Vector(myHero.position):extended(Vector(predPos), math.min(GetDistance(predPos) + 450, 850))
+    return Vector(myHero.position):extended(Vector(predPos), math.min(GetDistance(predPos) + 250, 650))
 end
 
 function Syndra:CastWE(target)
@@ -711,18 +690,11 @@ function Syndra:CastWE(target)
                 local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
                 local grabbedTarget, isOrb = self:GetTargetHeld()
                 if pred and pred.castPosition and grabbedTarget and isOrb then
-                    local wPos = self:GetQPos(pred.castPosition):toDX3()
-                    local dist = GetDistance(grabbedTarget, wPos)
-                    local wIntercept =
-                        os.clock() + self.spell.w.delay + dist / (dist * self.menu.w.m:get() + self.menu.w.b:get())
-                    self.spell.e.width = self.spell.e.widthMax
-                    if os.clock() + self.spell.e.delay + GetDistance(wPos) / self.spell.e.speed - wIntercept <= 0.1 then
-                        myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition):toDX3())
-                        self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
-                        self.spell.w.next2 = os.clock() + 0.7
-                        self.spell.w.next1 = os.clock() + 1
-                        return true
-                    end
+                    myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition):toDX3())
+                    self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
+                    self.spell.w.next2 = os.clock() + 0.7
+                    self.spell.w.next1 = os.clock() + 1
+                    return true
                 end
             end
         end
