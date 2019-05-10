@@ -546,9 +546,8 @@ end
 
 function Syndra:CastE(target)
     if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and _G.Prediction.IsValidTarget(target) then
+        local canHitOrbs, collOrbs, maxHit, maxOrb = {}, {}, 0, nil
         for i = 1, #self.orbs do
-            local orb = self.orbs[i]
-            local distToOrb = GetDistance(orb.obj.position)
             --[[ if distToOrb <= self.spell.e.range then
                 local timeToHitOrb = self.spell.e.delay + (distToOrb / self.spell.e.speed)
                 local expectedHitTime = os.clock() + timeToHitOrb - 0.1
@@ -589,6 +588,8 @@ function Syndra:CastE(target)
                     return true
                 end
             end ]]
+            local orb = self.orbs[i]
+            local distToOrb = GetDistance(orb.obj.position)
             if distToOrb <= self.spell.q.range - 25 then
                 local timeToHitOrb = self.spell.e.delay + (distToOrb / self.spell.e.speed)
                 local expectedHitTime = os.clock() + timeToHitOrb - 0.1
@@ -598,14 +599,36 @@ function Syndra:CastE(target)
                         (orb.obj and orb.obj.aiManagerClient and not orb.obj.aiManagerClient.navPath.isMoving)) and
                     orb.obj ~= self:GetTargetHeld()
                 if canHitOrb then
-                    self:CalcQE(target, distToOrb)
-                    local endPos = Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range)
-                    if _G.Prediction.IsCollision(self.spell.qe, myHero, endPos, target) then
-                        myHero.spellbook:CastSpell(SpellSlot.E, orb.obj.position)
-                        return true
-                    end
+                    canHitOrbs[#canHitOrbs + 1] = orb
                 end
             end
+        end
+        for i = 1, #canHitOrbs do
+            local orb = canHitOrbs[i]
+            self:CalcQE(target, GetDistance(orb.obj.position))
+            local endPos = Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range)
+            if _G.Prediction.IsCollision(self.spell.qe, myHero, endPos, target) then
+                collOrbs[orb] = 0
+            end
+        end
+        local posVec = Vector(myHero.position)
+        for orb, num in pairs(collOrbs) do
+            for i = 1, #canHitOrbs do
+                local orb2 = canHitOrbs[i]
+                if posVec:angleBetween(Vector(orb), Vector(orb2)) <= (myHero.spellbook:Spell(2).level < 5 and 20) or 30 then
+                    num = num + 1
+                end
+            end
+            if num > maxHit then
+                maxHit = num
+                maxOrb = orb
+            end
+        end
+        if maxHit > 0 and maxOrb then
+            myHero.spellbook:CastSpell(SpellSlot.E, maxOrb.obj.position)
+            self.spell.w.next1 = os.clock() + 1
+            self.spell.w.next2 = os.clock() + 0.7
+            return true
         end
     end
 end
