@@ -7,7 +7,6 @@ end--]]
 require "FF15Menu"
 require "utils"
 
---adjust WE so it always stuns
 --checks for antigapcloser
 --adjust widthmax
 
@@ -49,7 +48,7 @@ function Syndra:init()
             range = 700,
             delay = 0.30,
             width = 200,
-            widthMax = 100,
+            widthMax = 200,
             queue = nil
         },
         qe = {
@@ -239,7 +238,13 @@ function Syndra:OnTick()
                 print("W2")
                 return
             end
-            if self.menu.use.w1:get() and target and self:CastW1() then
+            _, isOrb = self:GetGrabTarget()
+            if
+                self.menu.use.w1:get() and target and
+                    (not myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready or
+                        (isOrb or not myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready)) and
+                    self:CastW1()
+             then
                 self.next = os.clock() + 0.05
                 print("W1")
                 return
@@ -389,7 +394,7 @@ function Syndra:GetGrabTarget()
     end
 
     if lowOrb then
-        return lowOrb
+        return lowOrb, true
     end
 
     local minionsInRange = ObjectManager:GetEnemyMinions()
@@ -404,7 +409,7 @@ function Syndra:GetGrabTarget()
         end
     end
     if lowMinion then
-        return lowMinion
+        return lowMinion, false
     end
 end
 
@@ -615,13 +620,20 @@ function Syndra:CastQEShort(target)
         if pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range then
             --qe short
             if
-                self:CanEQ(self:GetQPos(pred.castPosition), pred.castPosition, target) and
+                self:CanEQ(self:GetQPos(pred.castPosition, 200), pred.castPosition, target) and
                     (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
              then
-                self.spell.e.width = GetDistance(pred.castPosition) / self.spell.e.range * self.spell.e.widthMax
-                local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
+                for i = 0, 20, 1 do
+                    self.spell.e.width =
+                        -target.boundingRadius +
+                        GetDistance(pred.castPosition) / GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
+                            (self.spell.e.widthMax + target.boundingRadius) -
+                        10
+                    pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
+                end
+                print(self.spell.e.width)
                 if pred and pred.castPosition then
-                    myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(pred.castPosition):toDX3())
+                    myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(pred.castPosition, 200):toDX3())
                     self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 0}
                     self.spell.e.width = self.spell.e.widthMax
                     self.spell.w.next2 = os.clock() + 0.4
@@ -642,19 +654,7 @@ function Syndra:CastQELong(target)
      then
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if not (pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range) then
-            --qe long
             self:CalcQE(target, self.spell.q.range - 50)
-            --[[ local new_QE_spell =
-    setmetatable(
-    {
-        speed = 2000,
-        delay = self.spell.e.delay + (self.spell.e.range / self.spell.e.speed) -
-            (self.spell.e.range / self.spell.qe.speed)
-    },
-    {__index = self.spell.qe}
-)
-
-local pred = _G.Prediction.GetPrediction(target, new_QE_spell, myHero) ]]
             local pred = _G.Prediction.GetPrediction(target, self.spell.qe, myHero)
             if
                 pred and pred.castPosition and GetDistanceSqr(pred.castPosition) < self.spell.qe.rangeSqr and
@@ -669,8 +669,12 @@ local pred = _G.Prediction.GetPrediction(target, new_QE_spell, myHero) ]]
     end
 end
 
-function Syndra:GetQPos(predPos)
-    return Vector(myHero.position):extended(Vector(predPos), math.min(GetDistance(predPos) + 250, 650))
+function Syndra:GetQPos(predPos, offset)
+    offset = offset or 0
+    return Vector(myHero.position):extended(
+        Vector(predPos),
+        math.min(GetDistance(predPos) + 450 - offset, 850 - offset)
+    )
 end
 
 function Syndra:CastWE(target)
@@ -683,14 +687,20 @@ function Syndra:CastWE(target)
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range then
             if
-                self:CanEQ(self:GetQPos(pred.castPosition), pred.castPosition, target) and
+                self:CanEQ(self:GetQPos(pred.castPosition, 200), pred.castPosition, target) and
                     (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
              then
-                self.spell.e.width = GetDistance(pred.castPosition) / self.spell.e.range * self.spell.e.widthMax
-                local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
+                for i = 0, 20, 1 do
+                    self.spell.e.width =
+                        -target.boundingRadius +
+                        GetDistance(pred.castPosition) / GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
+                            (self.spell.e.widthMax + target.boundingRadius) -
+                        10
+                    pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
+                end
                 local grabbedTarget, isOrb = self:GetTargetHeld()
                 if pred and pred.castPosition and grabbedTarget and isOrb then
-                    myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition):toDX3())
+                    myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition, 200):toDX3())
                     self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
                     self.spell.w.next2 = os.clock() + 0.7
                     self.spell.w.next1 = os.clock() + 1
