@@ -7,8 +7,7 @@ end--]]
 require "FF15Menu"
 require "utils"
 
---checks for antigapcloser
---adjust widthmax
+--check end time for CastE
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
@@ -46,7 +45,7 @@ function Syndra:init()
             type = "linear",
             speed = 1600,
             range = 700,
-            delay = 0.30,
+            delay = 0.25,
             width = 200,
             widthMax = 200,
             queue = nil
@@ -56,7 +55,7 @@ function Syndra:init()
             pingPongSpeed = 2000,
             range = 1200,
             rangeSqr = 1200 * 1200,
-            delay = 0.30,
+            delay = 0.25,
             speed = 2000,
             width = 200
         }
@@ -232,7 +231,12 @@ function Syndra:OnTick()
         end
         local target = self:GetTarget(self.spell.w.range)
         if target and LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
-            if self.menu.use.w2:get() and target and self:CastW2(target) then
+            if
+                self.menu.use.w2:get() and target and
+                    (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
+                        GetDistance(target) >= self.spell.e.range - 50) and
+                    self:CastW2(target)
+             then
                 self.next = os.clock() + 0.05
                 print("W2")
                 return
@@ -240,8 +244,8 @@ function Syndra:OnTick()
             _, isOrb = self:GetGrabTarget()
             if
                 self.menu.use.w1:get() and target and
-                    (not myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready or
-                        (isOrb or not myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready)) and
+                    (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
+                        (isOrb or myHero.spellbook:CanUseSpell(SpellSlot.Q) ~= SpellState.Ready)) and
                     self:CastW1()
              then
                 self.next = os.clock() + 0.05
@@ -261,11 +265,15 @@ function Syndra:OnTick()
         end
         target = self:GetTarget(self.spell.q.range)
         if target and not LegitOrbwalker:IsAttacking() then
-            if LegitOrbwalker:GetMode() == "Combo" and self.menu.use.q:get() then
+            if
+                LegitOrbwalker:GetMode() == "Combo" and
+                    (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
+                        GetDistance(target) >= self.spell.e.range - 50) and
+                    self.menu.use.q:get()
+             then
                 if self:CastQ(target) then
                     self.next = os.clock() + 0.05
                     print("Q")
-
                     return
                 end
             elseif LegitOrbwalker:GetMode() == "Harass" then
@@ -517,8 +525,8 @@ function Syndra:CanEQ(qPos, predPos, target)
     local count = math.floor(GetDistance(predPos, qPos:toDX3()) / interval)
     local diff = (Vector(qpos) - Vector(myHero.position)):normalized()
     for i = 0, count do
-        local pos = Vector(predPos) + diff * i * interval
-        if NavMesh:IsWall(pos:toDX3()) then
+        local pos = (Vector(predPos) + diff * i * interval):toDX3()
+        if NavMesh:IsWall(pos) or NavMesh:IsBuilding(pos) then
             return false
         end
     end
@@ -546,6 +554,7 @@ end
 function Syndra:CastE(target)
     if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and _G.Prediction.IsValidTarget(target) then
         local canHitOrbs, collOrbs, maxHit, maxOrb = {}, {}, 0, nil
+        --check which orb can be hit
         for i = 1, #self.orbs do
             local orb = self.orbs[i]
             local distToOrb = GetDistance(orb.obj.position)
@@ -563,7 +572,7 @@ function Syndra:CastE(target)
             end
         end
         local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
-        local checkWidth = 100
+        local checkWidth = _G.Prediction.WaypointManager.ShouldCast(target) and self.spell.e.widthMax or 100
         local checkSpell =
             setmetatable(
             {
@@ -576,6 +585,7 @@ function Syndra:CastE(target)
             checkPred and checkPred.castPosition and
                 (checkPred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
          then
+            --check which orbs can hit enemy
             for i = 1, #canHitOrbs do
                 local orb = canHitOrbs[i]
                 self:CalcQE(target, GetDistance(orb.obj.position))
@@ -592,6 +602,7 @@ function Syndra:CastE(target)
                 end
             end
             local posVec = Vector(myHeroPred)
+            -- look for cast with most orbs hit
             for orb, num in pairs(collOrbs) do
                 for i = 1, #canHitOrbs do
                     local orb2 = canHitOrbs[i]
@@ -625,7 +636,6 @@ function Syndra:CastQEShort(target)
      then
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range then
-            --qe short
             if
                 self:CanEQ(self:GetQPos(pred.castPosition, 200), pred.castPosition, target) and
                     (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
