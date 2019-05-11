@@ -547,46 +547,6 @@ function Syndra:CastE(target)
     if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and _G.Prediction.IsValidTarget(target) then
         local canHitOrbs, collOrbs, maxHit, maxOrb = {}, {}, 0, nil
         for i = 1, #self.orbs do
-            --[[ if distToOrb <= self.spell.e.range then
-                local timeToHitOrb = self.spell.e.delay + (distToOrb / self.spell.e.speed)
-                local expectedHitTime = os.clock() + timeToHitOrb - 0.1
-                local canHitOrb =
-                    (orb.isInitialized and (expectedHitTime + 0.1 < orb.endT) or (expectedHitTime > orb.endT)) and
-                    (not orb.isInitialized or
-                        (orb.obj and orb.obj.aiManagerClient and not orb.obj.aiManagerClient.navPath.isMoving)) and
-                    orb.obj ~= self:GetTargetHeld()
-                if canHitOrb then
-                    local new_QE_spell =
-                        setmetatable(
-                        {
-                            speed = 2000,
-                            delay = timeToHitOrb - (distToOrb / self.spell.qe.speed)
-                        },
-                        {__index = self.spell.qe}
-                    )
-                    local endPos = Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range)
-
-                    if _G.Prediction.IsCollision(new_QE_spell, myHero, endPos, target) then
-                        myHero.spellbook:CastSpell(SpellSlot.E, orb.obj.position)
-                        return true
-                    end
-                end
-            elseif distToOrb <= self.spell.q.range and orb.isInitialized then
-                local new_E_spell =
-                    setmetatable(
-                    {
-                        range = self.spell.q.range
-                    },
-                    {__index = self.spell.e}
-                )
-                if _G.Prediction.IsCollision(new_E_spell, myHero, orb.obj.position, target) then
-                    local castPos = Vector(myHero.position):extended(Vector(orb.obj.position), 300):toDX3()
-                    myHero.spellbook:CastSpell(SpellSlot.E, castPos)
-                    self.spell.w.next1 = os.clock() + 1
-                    self.spell.w.next2 = os.clock() + 0.7
-                    return true
-                end
-            end ]]
             local orb = self.orbs[i]
             local distToOrb = GetDistance(orb.obj.position)
             if distToOrb <= self.spell.q.range - 25 then
@@ -602,6 +562,7 @@ function Syndra:CastE(target)
                 end
             end
         end
+        local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
         local checkWidth = 100
         local checkSpell =
             setmetatable(
@@ -610,7 +571,7 @@ function Syndra:CastE(target)
             },
             {__index = self.spell.qe}
         )
-        local checkPred = _G.Prediction.GetPrediction(target, checkSpell, myHero)
+        local checkPred = _G.Prediction.GetPrediction(target, checkSpell, myHeroPred)
         if
             checkPred and checkPred.castPosition and
                 (checkPred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
@@ -620,14 +581,17 @@ function Syndra:CastE(target)
                 self:CalcQE(target, GetDistance(orb.obj.position))
                 local seg =
                     LineSegment(
-                    Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range),
-                    Vector(myHero.position)
+                    Vector(myHeroPred):extended(Vector(orb.obj.position), self.spell.qe.range),
+                    Vector(myHeroPred)
                 )
-                if seg:distanceTo(Vector(checkPred.castPosition)) <= checkWidth / 2 then
+                if
+                    GetDistance(checkPred.castPosition) > GetDistance(orb.obj.position) - 100 and
+                        seg:distanceTo(Vector(checkPred.castPosition)) <= checkWidth / 2
+                 then
                     collOrbs[orb] = 0
                 end
             end
-            local posVec = Vector(myHero.position)
+            local posVec = Vector(myHeroPred)
             for orb, num in pairs(collOrbs) do
                 for i = 1, #canHitOrbs do
                     local orb2 = canHitOrbs[i]
