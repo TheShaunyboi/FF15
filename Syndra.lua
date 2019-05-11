@@ -692,7 +692,7 @@ end
 
 function Syndra:GetQPos(predPos, offset)
     offset = offset or 0
-    return Vector(myHero.position):extended(
+    return Vector(_G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)):extended(
         Vector(predPos),
         math.min(GetDistance(predPos) + 450 - offset, 850 - offset)
     )
