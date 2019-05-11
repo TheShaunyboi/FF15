@@ -553,6 +553,7 @@ end
 
 function Syndra:CastE(target)
     if myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and _G.Prediction.IsValidTarget(target) then
+        self.spell.qe.delay = 0.25
         local canHitOrbs, collOrbs, maxHit, maxOrb = {}, {}, 0, nil
         --check which orb can be hit
         for i = 1, #self.orbs do
@@ -572,7 +573,8 @@ function Syndra:CastE(target)
             end
         end
         local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
-        local checkWidth = _G.Prediction.WaypointManager.ShouldCast(target) and self.spell.e.widthMax or 100
+        local checkPred = _G.Prediction.GetPrediction(target, self.spell.e, myHeroPred)
+        local checkWidth = checkPred.realHitChance == 1 and self.spell.e.widthMax or 100
         local checkSpell =
             setmetatable(
             {
@@ -580,7 +582,7 @@ function Syndra:CastE(target)
             },
             {__index = self.spell.qe}
         )
-        local checkPred = _G.Prediction.GetPrediction(target, checkSpell, myHeroPred)
+        checkPred = _G.Prediction.GetPrediction(target, checkSpell, myHeroPred)
         if
             checkPred and checkPred.castPosition and
                 (checkPred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
@@ -634,6 +636,7 @@ function Syndra:CastQEShort(target)
             myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and
             myHero.mana >= 80 + 10 * myHero.spellbook:Spell(0).level
      then
+        self.spell.e.delay = 0.25 + NetClient.ping / 1000
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range then
             if
@@ -669,6 +672,7 @@ function Syndra:CastQELong(target)
             myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and
             myHero.mana >= 80 + 10 * myHero.spellbook:Spell(0).level
      then
+        self.spell.qe.delay = 0.25 + NetClient.ping / 1000
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if not (pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range) then
             self:CalcQE(target, self.spell.q.range - 50)
@@ -701,6 +705,7 @@ function Syndra:CastWE(target)
             myHero.mana >= 100 + 10 * myHero.spellbook:Spell(1).level and
             self:IsHoldingTarget()
      then
+        self.spell.e.delay = 0.25 + NetClient.ping / 1000
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if pred and pred.castPosition and GetDistance(pred.castPosition) <= self.spell.e.range then
             if
