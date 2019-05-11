@@ -130,7 +130,6 @@ function Syndra:Menu()
     self.menu:sub("w", "W Prediction")
     self.menu.w:slider("b", "Base Speed", 0, 1000, 300, 25)
     self.menu.w:slider("m", "Distance Multiplier", 0, 2, 0.95, 0.05)
-
     self.menu:checkbox("e", "AutoE", true, string.byte("T"))
     self.menu:sub("antigap", "Anti Gapclose")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
@@ -534,7 +533,7 @@ function Syndra:CalcQE(target, dist)
     local dist = dist or self.spell.e.range
     self.spell.qe.speed = self.spell.qe.pingPongSpeed
     local pred = _G.Prediction.GetPrediction(target, self.spell.qe, myHero)
-    for i = 0, 20, 1 do
+    for i = 0, 5, 1 do
         pred = _G.Prediction.GetPrediction(target, self.spell.qe, myHero)
         if pred and pred.castPosition then
             self.spell.qe.speed =
@@ -603,32 +602,53 @@ function Syndra:CastE(target)
                 end
             end
         end
-        for i = 1, #canHitOrbs do
-            local orb = canHitOrbs[i]
-            self:CalcQE(target, GetDistance(orb.obj.position))
-            local endPos = Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range)
-            if _G.Prediction.IsCollision(self.spell.qe, myHero, endPos, target) then
-                collOrbs[orb] = 0
-            end
-        end
-        local posVec = Vector(myHero.position)
-        for orb, num in pairs(collOrbs) do
+        local checkWidth = 100
+        local checkSpell =
+            setmetatable(
+            {
+                width = self.spell.qe.width - checkWidth / 2
+            },
+            {__index = self.spell.qe}
+        )
+        local checkPred = _G.Prediction.GetPrediction(target, checkSpell, myHero)
+        if
+            checkPred and checkPred.castPosition and
+                (checkPred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
+         then
             for i = 1, #canHitOrbs do
-                local orb2 = canHitOrbs[i]
-                if posVec:angleBetween(Vector(orb), Vector(orb2)) <= (myHero.spellbook:Spell(2).level < 5 and 20) or 30 then
-                    num = num + 1
+                local orb = canHitOrbs[i]
+                self:CalcQE(target, GetDistance(orb.obj.position))
+                local seg =
+                    LineSegment(
+                    Vector(myHero.position):extended(Vector(orb.obj.position), self.spell.qe.range),
+                    Vector(myHero.position)
+                )
+                if seg:distanceTo(Vector(checkPred.castPosition)) <= checkWidth / 2 then
+                    collOrbs[orb] = 0
                 end
             end
-            if num > maxHit then
-                maxHit = num
-                maxOrb = orb
+            local posVec = Vector(myHero.position)
+            for orb, num in pairs(collOrbs) do
+                for i = 1, #canHitOrbs do
+                    local orb2 = canHitOrbs[i]
+                    if
+                        posVec:angleBetween(Vector(orb), Vector(orb2)) <= (myHero.spellbook:Spell(2).level < 5 and 22.5) or
+                            35
+                     then
+                        num = num + 1
+                    end
+                end
+                if num > maxHit then
+                    maxHit = num
+                    maxOrb = orb
+                end
             end
-        end
-        if maxHit > 0 and maxOrb then
-            myHero.spellbook:CastSpell(SpellSlot.E, maxOrb.obj.position)
-            self.spell.w.next1 = os.clock() + 1
-            self.spell.w.next2 = os.clock() + 0.7
-            return true
+            if maxHit > 0 and maxOrb then
+                myHero.spellbook:CastSpell(SpellSlot.E, maxOrb.obj.position)
+                self.spell.w.next1 = os.clock() + 1
+                self.spell.w.next2 = os.clock() + 0.7
+                return true
+            end
         end
     end
 end
