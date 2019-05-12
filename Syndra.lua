@@ -665,8 +665,7 @@ function Syndra:CastQELong(target)
         self:CalcQELong(target, self.spell.q.range - 50)
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if
-            not (pred and pred.castPosition and
-                GetDistanceSqr(pred.castPosition) <= self.spell.e.range * self.spell.e.range) and
+            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) >= self.spell.e.range * self.spell.e.range and
                 GetDistanceSqr(pred.castPosition) < self.spell.qe.range * self.spell.qe.range and
                 (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
          then
