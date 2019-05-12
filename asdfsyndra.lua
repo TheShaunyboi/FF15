@@ -1,8 +1,8 @@
 local Syndra = {}
 local version = 1
---[[if tonumber(GetInternalWebResult("Syndra.version")) > version then
-    DownloadInternalFile("Syndra.lua", SCRIPT_PATH .. "Syndra.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("Syndra.version")) .. " Press F5")
+--[[if tonumber(GetInternalWebResult("asdfsyndra.version")) > version then
+    DownloadInternalFile("asdfsyndra.lua", SCRIPT_PATH .. "asdfsyndra.lua")
+    PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfsyndra.version")) .. " Press F5")
 end--]]
 require "FF15Menu"
 require "utils"

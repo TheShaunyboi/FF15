@@ -1,9 +1,9 @@
 local Karthus = {}
 local version = 1
---[[if tonumber(GetInternalWebResult("Karthus.version")) > version then
-    DownloadInternalFile("Karthus.lua", SCRIPT_PATH .. "Karthus.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("Karthus.version")) .. " Press F5")
-end--]]
+if tonumber(GetInternalWebResult("asdfkarthus.version")) > version then
+    DownloadInternalFile("asdfkarthus.lua", SCRIPT_PATH .. "asdfkarthus.lua")
+    PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkarthus.version")) .. " Press F5")
+end
 require "FF15Menu"
 require "utils"
 local DreamTS = require("DreamTS")

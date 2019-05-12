@@ -1,8 +1,8 @@
 local Xerath = {}
 local version = 1
-if tonumber(GetInternalWebResult("Xerath.version")) > version then
-    DownloadInternalFile("Xerath.lua", SCRIPT_PATH .. "Xerath.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("Xerath.version")) .. " Press F5")
+if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
+    DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
+    PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
 end
 require "FF15Menu"
 require "utils"
@@ -32,14 +32,14 @@ function Xerath:__init()
     self.w1 = {
         type = "circular",
         range = 1000,
-        delay = 0.83,
+        delay = 0.75,
         radius = 250,
         speed = math.huge
     }
     self.w2 = {
         type = "circular",
         range = 1000,
-        delay = 0.83,
+        delay = 0.75,
         radius = 123,
         speed = math.huge
     }
@@ -54,7 +54,7 @@ function Xerath:__init()
         type = "circular",
         active = false,
         range = 80000,
-        delay = 0.66,
+        delay = 0.6,
         radius = 200,
         speed = math.huge
     }
@@ -136,7 +136,7 @@ function Xerath:Menu()
     self.menu.xerathDraw.r:slider("rb", "Blue", 1, 255, 150)
 end
 
-local function DrawMinimapCircle(pos3d, radius, color)
+function Xerath:DrawMinimapCircle(pos3d, radius, color)
     pos3d = Vector(pos3d)
     local pts = {}
     local dir = pos3d:normalized()
@@ -191,7 +191,7 @@ function Xerath:OnDraw()
         end
         if self.menu.xerathDraw.r.rmini:get() then
             local radius = TacticalMap.width * self.r.range / 14692
-            DrawMinimapCircle(myHero, self.r.range, color)
+            self:DrawMinimapCircle(myHero, self.r.range, color)
             --DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
         end
     end

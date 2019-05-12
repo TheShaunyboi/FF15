@@ -1,8 +1,8 @@
 local Xerath = {}
 local version = 1.1
---[[if tonumber(GetInternalWebResult("Xerath.version")) > version then
-    DownloadInternalFile("Xerath.lua", SCRIPT_PATH .. "Xerath.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("Xerath.version")) .. " Press F5")
+--[[if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
+    DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
+    PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
 end=]]
 require "FF15Menu"
 require "utils"
