@@ -7,7 +7,6 @@ end--]]
 require "FF15Menu"
 require "utils"
 
---check end time for CastE
 --grab heimer ult
 
 local Vector = require("GeometryLib").Vector
@@ -51,7 +50,7 @@ function Syndra:init()
             passiveAngle = 68,
             queue = nil,
             blacklist = {},
-            next = os.clock()
+            next = nil
         },
         qe = {
             type = "linear",
@@ -384,7 +383,7 @@ function Syndra:AutoGrab()
      then
         for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
             if
-                (minion.name == "Tibbers" or minion.name == "IvernMinion") and
+                (minion.name == "Tibbers" or minion.name == "IvernMinion" or minion.name == "H-28G Evolution Turret") and
                     GetDistanceSqr(minion) < self.spell.w.range * self.spell.w.range
              then
                 myHero.spellbook:CastSpell(SpellSlot.W, minion.position)
@@ -608,8 +607,10 @@ function Syndra:CastQEShort(target)
                 end
                 if
                     pred and pred.castPosition and
-                        self.spell.e.next <=
-                            os.clock() + self.spell.e.delay + GetDistance(pred.castPosition) / self.spell.e.speed
+                        (not self.spell.e.next or
+                            GetDistanceSqr(self.spell.e.next.pos) > self.spell.e.range * self.spell.e.range or
+                            self.spell.e.next.time <=
+                                os.clock() + self.spell.e.delay + GetDistance(pred.castPosition) / self.spell.e.speed)
                  then
                     myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(pred.castPosition, 200):toDX3())
                     self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 0}
@@ -852,6 +853,7 @@ end
 function Syndra:OnProcessSpell(obj, spell)
     if obj == myHero then
         if spell.spellData.name == "SyndraQ" then
+            self.spell.e.next = nil
             self.orbs[#self.orbs + 1] = {
                 obj = {position = spell.endPos},
                 isInitialized = false,
@@ -872,7 +874,10 @@ function Syndra:OnProcessSpell(obj, spell)
                 myHero.spellbook:CastSpell(SpellSlot.E, self.spell.e.queue.pos)
                 self.spell.e.queue = nil
             end
-            self.spell.e.next = os.clock() + GetDistance(spell.endPos, spell.startPos) / self.spell.w.speed
+            self.spell.e.next = {
+                time = os.clock() + GetDistance(spell.endPos, spell.startPos) / self.spell.w.speed,
+                pos = spell.endPos
+            }
         elseif spell.spellData.name == "SyndraE" then
             local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
             local posVec = Vector(myHeroPred)
