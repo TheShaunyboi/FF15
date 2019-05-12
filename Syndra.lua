@@ -35,11 +35,9 @@ function Syndra:init()
             type = "circular",
             range = 950,
             rangeSqr = 950 * 950,
-            delay = 0,
+            delay = 0.25,
             radius = 220,
             speed = 1300,
-            distanceMult = 0.95,
-            baseSpeed = 300,
             next1 = os.clock(),
             next2 = os.clock()
         },
@@ -510,6 +508,7 @@ function Syndra:CastW2(target)
          then
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
+        end
     end
 end
 
