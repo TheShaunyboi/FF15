@@ -35,9 +35,9 @@ function Syndra:init()
             type = "circular",
             range = 950,
             rangeSqr = 950 * 950,
-            delay = 0.25,
+            delay = 0,
             radius = 220,
-            speed = 1200,
+            speed = 1300,
             distanceMult = 0.95,
             baseSpeed = 300,
             next1 = os.clock(),
@@ -128,9 +128,6 @@ function Syndra:Menu()
     self.menu.use:checkbox("e", "Use E", true)
     self.menu.use:checkbox("qe1", "Use QE Short", true)
     self.menu.use:checkbox("qe2", "Use QE Long", true, string.byte("Z"))
-    self.menu:sub("w", "W Prediction")
-    self.menu.w:slider("b", "Base Speed", 0, 1000, 300, 25)
-    self.menu.w:slider("m", "Distance Multiplier", 0, 2, 0.95, 0.05)
     self.menu:checkbox("e", "AutoE", true, string.byte("T"))
     self.menu:sub("antigap", "Anti Gapclose")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
@@ -506,27 +503,13 @@ function Syndra:CastW2(target)
     end
 
     if myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and os.clock() >= self.spell.w.next2 then
-        self.spell.w.speed = GetDistance(grabbedTarget, target.position) * self.menu.w.m:get() + self.menu.w.b:get()
-
-        local pred = _G.Prediction.GetPrediction(target, self.spell.w, grabbedTarget)
-        for i = 0, 20, 1 do
-            pred = _G.Prediction.GetPrediction(target, self.spell.w, grabbedTarget)
-            if pred and pred.castPosition then
-                self.spell.w.speed =
-                    GetDistance(grabbedTarget, pred.castPosition) * self.menu.w.m:get() + self.menu.w.b:get()
-            end
-        end
-
         local pred = _G.Prediction.GetPrediction(target, self.spell.w, grabbedTarget)
         if
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
                 GetDistanceSqr(pred.castPosition) <= self.spell.w.rangeSqr
          then
-            print(GetDistance(grabbedTarget, target.position) * self.menu.w.m:get() + self.menu.w.b:get())
-            print(self.spell.w.speed)
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
-        end
     end
 end
 
