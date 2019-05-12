@@ -570,13 +570,16 @@ function Syndra:CastE(target)
                 else
                     self:CalcQEShort(target, checkWidth)
                     local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHeroPred)
-                    if pred and pred.castPosition then
+                    if pred and pred.castPosition and GetDistanceSqr(pred.castPosition, orb.obj.position) <= 400 * 400 then
                         local seg =
                             LineSegment(
                             Vector(myHeroPred):extended(Vector(orb.obj.position), self.spell.qe.range),
                             Vector(myHeroPred)
                         )
-                        if seg:distanceTo(self:GetQPos(pred.castPosition)) <= checkWidth / 2 then
+                        if
+                            seg:distanceTo(self:GetQPos(pred.castPosition)) <= checkWidth / 2 and
+                                self:CanEQ(self:GetQPos(pred.castPosition), pred.castPosition, target)
+                         then
                             collOrbs[orb] = 0
                         end
                     end
