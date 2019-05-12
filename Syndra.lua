@@ -8,6 +8,8 @@ require "FF15Menu"
 require "utils"
 
 --check end time for CastE
+--check random CastE
+-- if preintialied orb in range, don't cast W1
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
@@ -245,7 +247,8 @@ function Syndra:OnTick()
             if
                 self.menu.use.w1:get() and target and
                     (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
-                        (isOrb or myHero.spellbook:CanUseSpell(SpellSlot.Q) ~= SpellState.Ready)) and
+                        (isOrb or myHero.spellbook:CanUseSpell(SpellSlot.Q) ~= SpellState.Ready) or
+                        not self:WaitToInitialize()) and
                     self:CastW1()
              then
                 self.next = os.clock() + 0.05
@@ -354,6 +357,15 @@ function Syndra:OnDraw()
         (self.menu.use.qe2:get() and "QE Long: On" or "QE Long: Off") ..
         "\n" .. (self.menu.e:get() and "Auto E: On" or "Auto E: Off")
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
+end
+
+function Syndra:WaitToInitialize()
+    for i = 1, #self.orbs do
+        local orb = self.orbs[i]
+        if not orb.isInitialized and GetDistanceSqr(orb.obj.position) <= self.spell.w.range * self.spell.w.range then
+            return true
+        end
+    end
 end
 
 function Syndra:AutoGrab()
@@ -647,8 +659,7 @@ function Syndra:CastQEShort(target)
                     self.spell.e.width =
                         -target.boundingRadius +
                         GetDistance(pred.castPosition) / GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
-                            (self.spell.e.widthMax + target.boundingRadius) -
-                        10
+                            (self.spell.e.widthMax + target.boundingRadius)
                     pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
                 end
                 print(self.spell.e.width)
@@ -681,7 +692,8 @@ function Syndra:CastQELong(target)
                 pred and pred.castPosition and GetDistanceSqr(pred.castPosition) < self.spell.qe.rangeSqr and
                     (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
              then
-                qPos = Vector(myHero.position):extended(Vector(pred.castPosition), (self.spell.q.range - 50)):toDX3()
+                local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
+                local qPos = Vector(myHeroPred):extended(Vector(pred.castPosition), (self.spell.q.range - 50)):toDX3()
                 myHero.spellbook:CastSpell(SpellSlot.Q, qPos)
                 self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 0}
                 return true
@@ -692,10 +704,8 @@ end
 
 function Syndra:GetQPos(predPos, offset)
     offset = offset or 0
-    return Vector(_G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)):extended(
-        Vector(predPos),
-        math.min(GetDistance(predPos) + 450 - offset, 850 - offset)
-    )
+    local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
+    return Vector(myHeroPred):extended(Vector(predPos), math.min(GetDistance(predPos) + 450 - offset, 850 - offset))
 end
 
 function Syndra:CastWE(target)
@@ -716,8 +726,7 @@ function Syndra:CastWE(target)
                     self.spell.e.width =
                         -target.boundingRadius +
                         GetDistance(pred.castPosition) / GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
-                            (self.spell.e.widthMax + target.boundingRadius) -
-                        10
+                            (self.spell.e.widthMax + target.boundingRadius)
                     pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
                 end
                 local grabbedTarget, isOrb = self:GetTargetHeld()
