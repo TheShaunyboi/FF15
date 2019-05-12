@@ -33,7 +33,6 @@ function Syndra:init()
         w = {
             type = "circular",
             range = 950,
-            rangeSqr = 950 * 950,
             delay = 0.25,
             radius = 220,
             speed = 1300,
@@ -55,7 +54,6 @@ function Syndra:init()
             type = "linear",
             pingPongSpeed = 2000,
             range = 1200,
-            rangeSqr = 1200 * 1200,
             delay = 0.25,
             speed = 2000,
             width = 200
@@ -323,14 +321,7 @@ function Syndra:OnDraw()
             ((orb.isInitialized and (not orb.obj.health or orb.obj.health == 1)) or not orb.isInitialized) and
                 GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range
          then
-            DrawHandler:Circle3D(
-                orb.obj.position,
-                40,
-                (orb.isInitialized and orb.obj and orb.obj.aiManagerClient and
-                    not orb.obj.aiManagerClient.navPath.isMoving) and
-                    Color.SkyBlue or
-                    Color.Red
-            )
+            DrawHandler:Circle3D(orb.obj.position, 40, orb.isInitialized and Color.SkyBlue or Color.Red)
 
             if self.menu.syndraDraw.qe:get() then
                 local new_pos = Vector(myHero):extended(Vector(orb.obj.position), self.spell.qe.range)
@@ -339,16 +330,13 @@ function Syndra:OnDraw()
                     myHero.position,
                     new_pos,
                     self.spell.qe.width,
-                    (orb.isInitialized and orb.obj and orb.obj.aiManagerClient and
-                        not orb.obj.aiManagerClient.navPath.isMoving) and
-                        Color.SkyBlue or
-                        Color.Red
+                    orb.isInitialized and Color.SkyBlue or Color.Red
                 )
             end
         end
     end
 
-    if self:IsHoldingTarget() and self.spell.w.obj then
+    if self.spell.w.obj then
         DrawHandler:Circle3D(self.spell.w.obj.position, 45, Color.Green)
     end
     local text =
@@ -376,7 +364,7 @@ function Syndra:AutoGrab()
         for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
             if
                 (minion.name == "Tibbers" or minion.name == "IvernMinion") and
-                    GetDistanceSqr(minion) < self.spell.w.rangeSqr
+                    GetDistanceSqr(minion) < self.spell.w.range * self.spell.w.range
              then
                 myHero.spellbook:CastSpell(SpellSlot.W, minion.position)
                 self.spell.w.next1 = os.clock() + self.spell.w.delay
@@ -446,31 +434,17 @@ function Syndra:CastW1()
         end
     end
 end
-
-function Syndra:IsHoldingTarget()
-    local buffs = myHero.buffManager.buffs
-
-    for i = 1, #buffs do
-        local buff = buffs[i]
-
-        if buff.name == "syndrawtooltip" then
-            return true
-        end
-    end
-
-    return false
-end
 function Syndra:CastW2(target)
-
     if not self.spell.w.obj then
         return
     end
-
     if myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and os.clock() >= self.spell.w.next2 then
-        local pred = _G.Prediction.GetPrediction(target, self.spell.w, grabbedTarget)
+        local pred = _G.Prediction.GetPrediction(target, self.spell.w, self.spell.w.obj)
         if
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                GetDistanceSqr(pred.castPosition) <= self.spell.w.rangeSqr
+                GetDistanceSqr(pred.castPosition) <= self.spell.w.range * self.spell.w.range and
+                not NavMesh:IsWall(pos) and
+                not NavMesh:IsBuilding(pos)
          then
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
@@ -637,7 +611,8 @@ function Syndra:CastQELong(target)
             self:CalcQE(target, self.spell.q.range - 50)
             local pred = _G.Prediction.GetPrediction(target, self.spell.qe, myHero)
             if
-                pred and pred.castPosition and GetDistanceSqr(pred.castPosition) < self.spell.qe.rangeSqr and
+                pred and pred.castPosition and
+                    GetDistanceSqr(pred.castPosition) < self.spell.qe.range * self.spell.qe.range and
                     (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
              then
                 local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
@@ -661,7 +636,7 @@ function Syndra:CastWE(target)
         myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and
             myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and
             myHero.mana >= 100 + 10 * myHero.spellbook:Spell(1).level and
-            self:IsHoldingTarget()
+            self.spell.w.obj
      then
         self.spell.e.delay = 0.25 + NetClient.ping / 1000
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
