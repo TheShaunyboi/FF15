@@ -8,10 +8,7 @@ require "FF15Menu"
 require "utils"
 
 --check end time for CastE
---check random CastE
 --grab heimer ult
---W2 -> QE Short - targets get knocked back, should block
---
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
@@ -172,14 +169,15 @@ function Syndra:OnTick()
     for i in pairs(self.spell.w.blacklist) do
         if not self.orbs[i] then
             self.spell.w.blacklist[i] = nil
-        else
+        elseif self.spell.w.blacklist[i].nextCheckTime then
             if
-                os.clock() >= self.spell.w.blacklist[i].time and
+                os.clock() >= self.spell.w.blacklist[i].interceptTime and
                     GetDistanceSqr(self.orbs[i].obj.position, self.spell.w.blacklist[i].pos) == 0
              then
                 self.spell.w.blacklist[i] = nil
             else
                 self.spell.w.blacklist[i].pos = self.orbs[i].obj.position
+                self.spell.w.blacklist[i].nextCheckTime = os.clock() + 0.1
             end
         end
     end
@@ -194,8 +192,9 @@ function Syndra:OnTick()
             self.spell.e.blacklist[orb] = orb.position
         end
     end
-    for i = #self.orbs, 1, -1 do
-        if os.clock() >= self.orbs[i].endT and not self.orbs[i].isInitialized then
+    for i in pairs(self.orbs) do
+        local orb = self.orbs[i]
+        if os.clock() >= orb.endT or (orb.obj.health and orb.obj.health ~= 1) then
             table.remove(self.orbs, i)
         end
     end
@@ -332,20 +331,23 @@ function Syndra:OnDraw()
             )
         )
     end
-    for i = 1, #self.orbs do
+    for i in pairs(self.orbs) do
         local orb = self.orbs[i]
-        if ((orb.isInitialized and (not orb.obj.health or orb.obj.health == 1)) or not orb.isInitialized) then
-            DrawHandler:Circle3D(orb.obj.position, 40, orb.isInitialized and Color.SkyBlue or Color.Red)
-            if GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range then
-                local new_pos = Vector(myHero):extended(Vector(orb.obj.position), self.spell.qe.range)
-
-                _G.Prediction.Drawing.DrawRectangle(
-                    myHero.position,
-                    new_pos,
-                    self.spell.qe.width,
-                    orb.isInitialized and Color.SkyBlue or Color.Red
-                )
-            end
+        DrawHandler:Circle3D(orb.obj.position, 40, orb.isInitialized and Color.SkyBlue or Color.Red)
+        DrawHandler:Text(
+            DrawHandler.defaultFont,
+            Renderer:WorldToScreen(orb.obj.position),
+            math.ceil(orb.endT - os.clock()),
+            Color.White
+        )
+        if GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range then
+            local new_pos = Vector(myHero):extended(Vector(orb.obj.position), self.spell.qe.range)
+            _G.Prediction.Drawing.DrawRectangle(
+                myHero.position,
+                new_pos,
+                self.spell.qe.width,
+                orb.isInitialized and Color.SkyBlue or Color.Red
+            )
         end
     end
 
@@ -365,7 +367,7 @@ function Syndra:OnDraw()
 end
 
 function Syndra:WaitToInitialize()
-    for i = 1, #self.orbs do
+    for i in pairs(self.orbs) do
         local orb = self.orbs[i]
         if not orb.isInitialized and GetDistanceSqr(orb.obj.position) <= self.spell.w.range * self.spell.w.range then
             return true
@@ -409,7 +411,7 @@ end
 function Syndra:GetGrabTarget()
     local lowTime = math.huge
     local lowOrb = nil
-    for i = 1, #self.orbs do
+    for i in pairs(self.orbs) do
         local orb = self.orbs[i]
         if
             not self.spell.w.blacklist[i] and orb.isInitialized and orb.endT < lowTime and
@@ -512,7 +514,7 @@ function Syndra:CastE(target)
         self.spell.qe.delay = 0.25
         local canHitOrbs, collOrbs, maxHit, maxOrb = {}, {}, 0, nil
         --check which orb can be hit
-        for i = 1, #self.orbs do
+        for i in pairs(self.orbs) do
             local orb = self.orbs[i]
             local distToOrb = GetDistance(orb.obj.position)
             if distToOrb <= self.spell.q.range - 25 then
@@ -604,7 +606,11 @@ function Syndra:CastQEShort(target)
                             (self.spell.e.widthMax + target.boundingRadius)
                     pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
                 end
-                if pred and pred.castPosition and self.spell.e.next <= os.clock() + self.spell.e.delay + GetDistance(pred.castPosition) / self.spell.e.speed then
+                if
+                    pred and pred.castPosition and
+                        self.spell.e.next <=
+                            os.clock() + self.spell.e.delay + GetDistance(pred.castPosition) / self.spell.e.speed
+                 then
                     myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(pred.castPosition, 200):toDX3())
                     self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 0}
                     self.spell.e.width = self.spell.e.widthMax
@@ -779,18 +785,16 @@ end
 function Syndra:OnCreateObj(obj)
     if obj.name == "Seed" and obj.team == myHero.team then
         local replaced = false
-        for i = 1, #self.orbs do
+        for i in pairs(self.orbs) do
             local orb = self.orbs[i]
             if not orb.isInitialized and GetDistanceSqr(obj.position, orb.obj.position) == 0 then
-                self.orbs[i] = {obj = obj, isInitialized = true, endT = os.clock() + 6}
+                self.orbs[i] = {obj = obj, isInitialized = true, endT = os.clock() + 6.25}
                 replaced = true
             end
         end
         if not replaced then
-            self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = true, endT = os.clock() + 6}
+            self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = true, endT = os.clock() + 6.25}
         end
-    --[[ elseif obj.name == "k" and obj.team == myHero.team then
-        self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = false, endT = os.clock() + 0.625} ]]
     end
     if string.match(obj.name, "heldTarget_buf_02") then
         self.spell.w.heldInfo = nil
@@ -814,11 +818,11 @@ function Syndra:OnCreateObj(obj)
             self.spell.w.heldInfo = {obj = maxObj, isOrb = false}
         end
         if not self.spell.w.heldInfo then
-            for i = 1, #self.orbs do
+            for i in pairs(self.orbs) do
                 local orb = self.orbs[i]
                 if orb.isInitialized and GetDistance(obj.position, orb.obj.position) <= 1 then
                     self.spell.w.heldInfo = {obj = orb.obj, isOrb = true}
-                    orb.endT = os.clock() + 6
+                    orb.endT = os.clock() + 6.25
                     self.spell.e.blacklist[orb.obj] = orb.obj.position
                 end
             end
@@ -828,7 +832,7 @@ end
 
 function Syndra:OnDeleteObj(obj)
     if obj.name == "Seed" and obj.team == myHero.team then
-        for i = #self.orbs, 1, -1 do
+        for i in pairs(self.orbs) do
             if self.orbs[i].obj == obj then
                 table.remove(self.orbs, i)
             end
@@ -872,7 +876,7 @@ function Syndra:OnProcessSpell(obj, spell)
         elseif spell.spellData.name == "SyndraE" then
             local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
             local posVec = Vector(myHeroPred)
-            for i = 1, #self.orbs do
+            for i in pairs(self.orbs) do
                 if
                     GetDistanceSqr(myHeroPred, self.orbs[i].obj.position) <= self.spell.e.range * self.spell.e.range and
                         posVec:angleBetween(Vector(spell.endPos), Vector(self.orbs[i].obj.position)) <=
@@ -880,8 +884,10 @@ function Syndra:OnProcessSpell(obj, spell)
                                 self.spell.e.passiveAngle / 2 + 10)
                  then
                     self.spell.w.blacklist[i] = {
-                        time = os.clock() + GetDistance(myHeroPred, self.orbs[i].obj.position) / self.spell.e.speed +
+                        interceptTime = os.clock() +
+                            GetDistance(myHeroPred, self.orbs[i].obj.position) / self.spell.e.speed +
                             0.4,
+                        nextCheckTime = os.clock() + 0.1,
                         pos = self.orbs[i].obj.position
                     }
                 end
