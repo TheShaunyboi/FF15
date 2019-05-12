@@ -36,8 +36,7 @@ function Syndra:init()
             delay = 0.25,
             radius = 220,
             speed = 1300,
-            obj = nil,
-            isOrb = nil,
+            heldInfo = nil,
             next1 = os.clock(),
             next2 = os.clock()
         },
@@ -48,7 +47,8 @@ function Syndra:init()
             delay = 0.25,
             width = 200,
             widthMax = 200,
-            queue = nil
+            queue = nil,
+            blacklist = {}
         },
         qe = {
             type = "linear",
@@ -160,10 +160,20 @@ function Syndra:Menu()
     self.menu.syndraDraw.e:slider("er", "Red", 1, 255, 150)
     self.menu.syndraDraw.e:slider("eg", "Green", 1, 255, 150)
     self.menu.syndraDraw.e:slider("eb", "Blue", 1, 255, 150)
-    self.menu.syndraDraw:checkbox("qe", "Orb", true)
 end
 
 function Syndra:OnTick()
+    for orb in pairs(self.spell.e.blacklist) do
+        -- if not the
+        if
+            not (self.spell.w.heldInfo and orb == self.spell.w.heldInfo.obj) and
+                GetDistance(self.spell.e.blacklist[orb], orb.position) == 0
+         then
+            self.spell.e.blacklist[orb] = nil
+        else
+            self.spell.e.blacklist[orb] = orb.position
+        end
+    end
     for i = #self.orbs, 1, -1 do
         if os.clock() >= self.orbs[i].endT and not self.orbs[i].isInitialized then
             table.remove(self.orbs, i)
@@ -317,13 +327,9 @@ function Syndra:OnDraw()
     for i = 1, #self.orbs do
         local orb = self.orbs[i]
 
-        if
-            ((orb.isInitialized and (not orb.obj.health or orb.obj.health == 1)) or not orb.isInitialized) and
-                GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range
-         then
+        if ((orb.isInitialized and (not orb.obj.health or orb.obj.health == 1)) or not orb.isInitialized) then
             DrawHandler:Circle3D(orb.obj.position, 40, orb.isInitialized and Color.SkyBlue or Color.Red)
-
-            if self.menu.syndraDraw.qe:get() then
+            if GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range then
                 local new_pos = Vector(myHero):extended(Vector(orb.obj.position), self.spell.qe.range)
 
                 _G.Prediction.Drawing.DrawRectangle(
@@ -336,8 +342,11 @@ function Syndra:OnDraw()
         end
     end
 
-    if self.spell.w.obj then
-        DrawHandler:Circle3D(self.spell.w.obj.position, 45, Color.Green)
+    if self.spell.w.heldInfo then
+        DrawHandler:Circle3D(self.spell.w.heldInfo.obj.position, 45, Color.Green)
+    end
+    for orb in pairs(self.spell.e.blacklist) do
+        DrawHandler:Circle3D(orb.position, 50, Color.Yellow)
     end
     local text =
         (self.menu.use.qe2:get() and "QE Long: On" or "QE Long: Off") ..
@@ -435,11 +444,11 @@ function Syndra:CastW1()
     end
 end
 function Syndra:CastW2(target)
-    if not self.spell.w.obj then
+    if not self.spell.w.heldInfo then
         return
     end
     if myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and os.clock() >= self.spell.w.next2 then
-        local pred = _G.Prediction.GetPrediction(target, self.spell.w, self.spell.w.obj)
+        local pred = _G.Prediction.GetPrediction(target, self.spell.w, self.spell.w.heldInfo.obj)
         if
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
                 GetDistanceSqr(pred.castPosition) <= self.spell.w.range * self.spell.w.range and
@@ -498,9 +507,8 @@ function Syndra:CastE(target)
                 local expectedHitTime = os.clock() + timeToHitOrb - 0.1
                 local canHitOrb =
                     (orb.isInitialized and (expectedHitTime + 0.1 < orb.endT) or (expectedHitTime > orb.endT)) and
-                    (not orb.isInitialized or
-                        (orb.obj and orb.obj.aiManagerClient and not orb.obj.aiManagerClient.navPath.isMoving)) and
-                    orb.obj ~= self.spell.w.obj
+                    (not orb.isInitialized or (orb.obj and not self.spell.e.blacklist[orb.obj])) and
+                    (not self.spell.w.heldInfo or orb.obj ~= self.spell.w.heldInfo.obj)
                 if canHitOrb then
                     canHitOrbs[#canHitOrbs + 1] = orb
                 end
@@ -636,7 +644,7 @@ function Syndra:CastWE(target)
         myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and
             myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and
             myHero.mana >= 100 + 10 * myHero.spellbook:Spell(1).level and
-            self.spell.w.obj
+            self.spell.w.heldInfo
      then
         self.spell.e.delay = 0.25 + NetClient.ping / 1000
         local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
@@ -652,7 +660,7 @@ function Syndra:CastWE(target)
                             (self.spell.e.widthMax + target.boundingRadius)
                     pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
                 end
-                if pred and pred.castPosition and self.spell.w.obj and self.spell.w.isOrb then
+                if pred and pred.castPosition and self.spell.w.heldInfo and self.spell.w.heldInfo.isOrb then
                     myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition, 200):toDX3())
                     self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
                     self.spell.w.next2 = os.clock() + 0.7
@@ -768,21 +776,33 @@ function Syndra:OnCreateObj(obj)
         self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = false, endT = os.clock() + 0.625} ]]
     end
     if string.match(obj.name, "heldTarget_buf_02") then
+        self.spell.w.heldInfo = nil
         local minions = ObjectManager:GetEnemyMinions()
+        local maxObj = nil
+        local maxTime = 0
         for i = 1, #minions do
             local minion = minions[i]
-            if minion and not minion.isDead and GetDistance(obj.position, minion.position) <= 1 then
-                self.spell.w.obj = minion
-                self.spell.w.isOrb = false
+            if minion and not minion.isDead and GetDistanceSqr(minion) < self.spell.w.range * self.spell.w.range then
+                local buffs = minion.buffManager.buffs
+                for i = 1, #buffs do
+                    local buff = buffs[i]
+                    if buff.name == "syndrawbuff" and maxTime < buff.remainingTime then
+                        maxObj = minion
+                        maxTime = buff.remainingTime
+                    end
+                end
             end
         end
-        if not self.spell.w.obj then
+        if maxObj then
+            self.spell.w.heldInfo = {obj = maxObj, isOrb = false}
+        end
+        if not self.spell.w.heldInfo then
             for i = 1, #self.orbs do
                 local orb = self.orbs[i]
                 if orb.isInitialized and GetDistance(obj.position, orb.obj.position) <= 1 then
-                    self.spell.w.obj = orb.obj
-                    self.spell.w.isOrb = true
+                    self.spell.w.heldInfo = {obj = orb.obj, isOrb = true}
                     orb.endT = os.clock() + 6
+                    self.spell.e.blacklist[orb.obj] = orb.obj.position
                 end
             end
         end
@@ -804,8 +824,7 @@ end
 
 function Syndra:OnBuffLost(obj, buff)
     if obj == myHero and buff.name == "syndrawtooltip" then
-        self.spell.w.obj = nil
-        self.spell.w.isOrb = nil
+        self.spell.w.heldInfo = nil
     end
 end
 
