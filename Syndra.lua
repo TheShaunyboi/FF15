@@ -443,8 +443,8 @@ function Syndra:CastW2(target)
         if
             pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
                 GetDistanceSqr(pred.castPosition) <= self.spell.w.range * self.spell.w.range and
-                not NavMesh:IsWall(pos) and
-                not NavMesh:IsBuilding(pos)
+                not NavMesh:IsWall(pred.castPosition) and
+                not NavMesh:IsBuilding(pred.castPosition)
          then
             myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
             return true
