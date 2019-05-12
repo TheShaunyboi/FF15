@@ -9,7 +9,6 @@ require "utils"
 
 --check end time for CastE
 --check random CastE
--- if preintialied orb in range, don't cast W1
 
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
@@ -38,6 +37,8 @@ function Syndra:init()
             delay = 0.25,
             radius = 220,
             speed = 1300,
+            obj = nil,
+            isOrb = nil,
             next1 = os.clock(),
             next2 = os.clock()
         },
@@ -103,6 +104,12 @@ function Syndra:init()
         Events.OnBuffGain,
         function(obj, buff)
             self:OnBuffGain(obj, buff)
+        end
+    )
+    AddEvent(
+        Events.OnBuffLost,
+        function(obj, buff)
+            self:OnBuffLost(obj, buff)
         end
     )
     AddEvent(
@@ -341,12 +348,8 @@ function Syndra:OnDraw()
         end
     end
 
-    if self:IsHoldingTarget() then
-        local obj = self:GetTargetHeld()
-
-        if obj then
-            DrawHandler:Circle3D(obj.position, 45, Color.Green)
-        end
+    if self:IsHoldingTarget() and self.spell.w.obj then
+        DrawHandler:Circle3D(self.spell.w.obj.position, 45, Color.Green)
     end
     local text =
         (self.menu.use.qe2:get() and "QE Long: On" or "QE Long: Off") ..
@@ -457,46 +460,9 @@ function Syndra:IsHoldingTarget()
 
     return false
 end
-
-function Syndra:GetTargetHeld()
-    local minions = ObjectManager:GetEnemyMinions()
-
-    local function HasSyndraBuff(unit)
-        local buffs = unit.buffManager.buffs
-
-        for i = 1, #buffs do
-            local buff = buffs[i]
-
-            if buff.name == "syndrawbuff" then
-                return true
-            end
-        end
-    end
-
-    for i = 1, #minions do
-        local minion = minions[i]
-        if minion and not minion.isDead and GetDistanceSqr(minion) < self.spell.w.rangeSqr and HasSyndraBuff(minion) then
-            return minion, false
-        end
-    end
-
-    for i = 1, #self.orbs do
-        local orb = self.orbs[i]
-
-        if orb.isInitialized and orb.obj and orb.obj.aiManagerClient and orb.obj.aiManagerClient.navPath.isMoving then
-            return orb.obj, true
-        end
-    end
-end
-
 function Syndra:CastW2(target)
-    if not self:IsHoldingTarget() then
-        return
-    end
 
-    local grabbedTarget = self:GetTargetHeld()
-
-    if not grabbedTarget then
+    if not self.spell.w.obj then
         return
     end
 
@@ -560,7 +526,7 @@ function Syndra:CastE(target)
                     (orb.isInitialized and (expectedHitTime + 0.1 < orb.endT) or (expectedHitTime > orb.endT)) and
                     (not orb.isInitialized or
                         (orb.obj and orb.obj.aiManagerClient and not orb.obj.aiManagerClient.navPath.isMoving)) and
-                    orb.obj ~= self:GetTargetHeld()
+                    orb.obj ~= self.spell.w.obj
                 if canHitOrb then
                     canHitOrbs[#canHitOrbs + 1] = orb
                 end
@@ -711,8 +677,7 @@ function Syndra:CastWE(target)
                             (self.spell.e.widthMax + target.boundingRadius)
                     pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
                 end
-                local grabbedTarget, isOrb = self:GetTargetHeld()
-                if pred and pred.castPosition and grabbedTarget and isOrb then
+                if pred and pred.castPosition and self.spell.w.obj and self.spell.w.isOrb then
                     myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition, 200):toDX3())
                     self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
                     self.spell.w.next2 = os.clock() + 0.7
@@ -827,6 +792,26 @@ function Syndra:OnCreateObj(obj)
     --[[ elseif obj.name == "k" and obj.team == myHero.team then
         self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = false, endT = os.clock() + 0.625} ]]
     end
+    if string.match(obj.name, "heldTarget_buf_02") then
+        local minions = ObjectManager:GetEnemyMinions()
+        for i = 1, #minions do
+            local minion = minions[i]
+            if minion and not minion.isDead and GetDistance(obj.position, minion.position) <= 1 then
+                self.spell.w.obj = minion
+                self.spell.w.isOrb = false
+            end
+        end
+        if not self.spell.w.obj then
+            for i = 1, #self.orbs do
+                local orb = self.orbs[i]
+                if orb.isInitialized and GetDistance(obj.position, orb.obj.position) <= 1 then
+                    self.spell.w.obj = orb.obj
+                    self.spell.w.isOrb = true
+                    orb.endT = os.clock() + 6
+                end
+            end
+        end
+    end
 end
 
 function Syndra:OnDeleteObj(obj)
@@ -838,40 +823,39 @@ function Syndra:OnDeleteObj(obj)
         end
     end
 end
+
 function Syndra:OnBuffGain(obj, buff)
+end
+
+function Syndra:OnBuffLost(obj, buff)
     if obj == myHero and buff.name == "syndrawtooltip" then
-        local obj, isOrb = self:GetTargetHeld()
-        if isOrb then
-            for i = 1, #self.orbs do
-                if self.orbs[i].obj == obj then
-                    self.orbs[i].endT = os.clock() + 6
-                end
-            end
-        end
+        self.spell.w.obj = nil
+        self.spell.w.isOrb = nil
     end
 end
 
 function Syndra:OnProcessSpell(obj, spell)
-    if obj == myHero and spell.spellData.name == "SyndraQ" then
-        self.orbs[#self.orbs + 1] = {
-            obj = {position = spell.endPos},
-            isInitialized = false,
-            endT = os.clock() + 0.625
-        }
-        if
-            self.spell.e.queue and self.spell.e.queue.spell == 0 and
+    if obj == myHero then
+        if spell.spellData.name == "SyndraQ" then
+            self.orbs[#self.orbs + 1] = {
+                obj = {position = spell.endPos},
+                isInitialized = false,
+                endT = os.clock() + 0.625
+            }
+            if
+                self.spell.e.queue and self.spell.e.queue.spell == 0 and
+                    myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready
+             then
+                myHero.spellbook:CastSpell(SpellSlot.E, self.spell.e.queue.pos)
+                self.spell.e.queue = nil
+            end
+        elseif
+            spell.spellData.name == "SyndraWCast" and self.spell.e.queue and self.spell.e.queue.spell == 1 and
                 myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready
          then
             myHero.spellbook:CastSpell(SpellSlot.E, self.spell.e.queue.pos)
             self.spell.e.queue = nil
         end
-    end
-    if
-        obj == myHero and spell.spellData.name == "SyndraWCast" and self.spell.e.queue and self.spell.e.queue.spell == 1 and
-            myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready
-     then
-        myHero.spellbook:CastSpell(SpellSlot.E, self.spell.e.queue.pos)
-        self.spell.e.queue = nil
     end
 end
 
