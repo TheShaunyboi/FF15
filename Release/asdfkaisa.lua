@@ -1,5 +1,5 @@
 local Kaisa = {}
-local version = 1
+local version = 1.2
 if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
     DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
@@ -14,7 +14,7 @@ function OnLoad()
 end
 
 function Kaisa:__init()
-    self.qRange = 600
+    self.qRange = 550
     self.w = {
         searchRange = 400,
         speed = 1750,
@@ -69,24 +69,28 @@ function Kaisa:Menu()
 end
 
 function Kaisa:OnDraw()
+    local text = ""
     if self.menu.q:get() then
         DrawHandler:Circle3D(
             myHero.position,
             self.qRange,
             self:Hex(255, self.menu.drawQ.q0r:get(), self.menu.drawQ.q0g:get(), self.menu.drawQ.q0b:get())
         )
+        text = "AutoQ on"
     else
         DrawHandler:Circle3D(
             myHero.position,
             self.qRange,
             self:Hex(255, self.menu.drawQ.q1r:get(), self.menu.drawQ.q1g:get(), self.menu.drawQ.q1b:get())
         )
+        text = "AutoQ off"
     end
     DrawHandler:Circle3D(
         pwHud.hudManager.virtualCursorPos,
         self.w.searchRange,
         self:Hex(255, self.menu.drawW.wr:get(), self.menu.drawW.wg:get(), self.menu.drawW.wb:get())
     )
+    DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
 
 function Kaisa:CastQ()
@@ -99,27 +103,30 @@ function Kaisa:W()
     local target1 = LegitOrbwalker:GetTarget(self.w.searchRange, "AP", pwHud.hudManager.virtualCursorPos)
     local target2 = LegitOrbwalker:GetTarget(myHero.characterIntermediate.attackRange, "AP", myHero)
     if target1 then
-        self:CastW(target1)
+        self:CastW(target1, true)
     elseif target2 then
-        self:CastW(target2)
+        self:CastW(target2, false)
     else
         --on CC
         for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
             if
-            _G.Prediction.IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
+                _G.Prediction.IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
                     _G.Prediction.IsImmobile(enemy, GetDistance(enemy) / self.w.speed + self.w.delay)
              then
-                self:CastW(enemy)
+                self:CastW(enemy, true)
             end
         end
     end
 end
 
-function Kaisa:CastW(target)
+function Kaisa:CastW(target, slow)
     if myHero.spellbook:CanUseSpell(1) == 0 and GetDistance(target.position) <= self.w.range then
         local pred = _G.Prediction.GetPrediction(target, self.w, myHero)
         if
-            pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
+            pred and pred.castPosition and
+                ((pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) or not slow) and
+                not pred:windWallCollision() and
+                not pred:minionCollision() and
                 GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range
          then
             myHero.spellbook:CastSpell(1, pred.castPosition)
@@ -133,7 +140,9 @@ function Kaisa:OnTick()
     end
     if LegitOrbwalker:GetMode() == "Combo" then
         self:CastQ()
-        self:W()
+        if not LegitOrbwalker:IsAttacking() then
+            self:W()
+        end
     end
 end
 
