@@ -1,9 +1,9 @@
 local Ezreal = {}
-local version = 1
+local version = 1.1
 if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
-end-
+end
 require "FF15Menu"
 require "utils"
 local DreamTS = require("DreamTS")
