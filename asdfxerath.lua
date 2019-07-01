@@ -1,62 +1,81 @@
 local Xerath = {}
-local version = 1.1
---[[if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
+local version = 2
+if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
-end=]]
-require "FF15Menu"
-require "utils"
+end
+require("FF15Menu")
+require("utils")
 local DreamTS = require("DreamTS")
-local dmgLib = require("FF15DamageLib")
+local Orbwalker = require("FF15OL")
+local Vector = require("GeometryLib").Vector
 
 function OnLoad()
     if not _G.Prediction then
-        LoadPaidScript(PaidScript.DREAM_PRED)
+        _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
     end
+    Orbwalker:Setup()
 end
-
-local Vector = require("GeometryLib").Vector
 
 function Xerath:__init()
     self.q = {
         type = "linear",
         last = nil,
-        min = 750,
-        max = 1450,
-        charge = 1.5,
+        min = 850,
+        max = 1500,
+        charge = 1.2,
         range = 1450,
         delay = 0.6,
         width = 145,
-        speed = math.huge
+        speed = math.huge,
+        castRate = "slow"
     }
     self.w1 = {
         type = "circular",
         range = 1000,
-        delay = 0.75,
+        delay = 0.83,
         radius = 250,
-        speed = math.huge
+        speed = math.huge,
+        castRate = "slow"
     }
     self.w2 = {
         type = "circular",
         range = 1000,
-        delay = 0.75,
+        delay = 0.83,
         radius = 123,
-        speed = math.huge
+        speed = math.huge,
+        castRate = "slow"
     }
     self.e = {
         type = "linear",
         range = 1000,
         delay = 0.25,
         width = 125,
-        speed = 1400
+        speed = 1400,
+        castRate = "slow",
+        collision =
+        {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
     }
     self.r = {
         type = "circular",
         active = false,
         range = 80000,
-        delay = 0.6,
+        delay = 0.7,
         radius = 200,
-        speed = math.huge
+        speed = math.huge,
+        castRate = "slow"
+    }
+
+    self.LastCasts =
+    {
+        Q = 0,
+        W = 0,
+        E = 0,
+        R = 0
     }
 
     self:Menu()
@@ -64,38 +83,16 @@ function Xerath:__init()
         DreamTS(
         self.menu.dreamTs,
         {
-            ValidTarget = function(unit)
+            ValidTarget = function(unit) -- only used by DreamTS:update()
                 return _G.Prediction.IsValidTarget(unit)
             end,
-            Damage = function(unit)
-                return dmgLib:CalculateMagicDamage(myHero, unit, 100)
-            end
+            Damage = DreamTS.Damages.AP
         }
     )
     AddEvent(
         Events.OnTick,
         function()
             self:OnTick()
-        end
-    )
-    --[[
-    AddEvent(
-        Events.OnBuffGain,
-        function(obj, buff)
-            self:OnBuffGain(obj, buff)
-        end
-    )
-    AddEvent(
-        Events.OnBuffLost,
-        function(obj, buff)
-            self:OnBuffLost(obj, buff)
-        end
-    )
-    ]]
-    AddEvent(
-        Events.OnNewPath,
-        function(obj, paths, isWalk, dashspeed)
-            self:OnNewPath(obj, paths, isWalk, dashspeed)
         end
     )
     AddEvent(
@@ -111,13 +108,13 @@ end
 function Xerath:Menu()
     self.menu = Menu("asdfxerath", "Xerath")
     self.menu:sub("dreamTs", "Target Selector")
-    self.menu:slider("wc", "W Center Hitchance", 1, 100, 50)
-    self.menu:slider("e", "E Hitchance", 1, 100, 50)
 
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:sub("antigap", "Anti Gapclose")
+    self.antiGapHeros = {}
     for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
         self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
+        self.antiGapHeros[enemy.networkId] = true
     end
     self.menu:key("tap", "Tap Key", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
@@ -136,7 +133,7 @@ function Xerath:Menu()
     self.menu.xerathDraw.r:slider("rb", "Blue", 1, 255, 150)
 end
 
-function Xerath:DrawMinimapCircle(pos3d, radius, color)
+local function DrawMinimapCircle(pos3d, radius, color)
     pos3d = Vector(pos3d)
     local pts = {}
     local dir = pos3d:normalized()
@@ -177,7 +174,7 @@ function Xerath:OnDraw()
             )
         )
     end
-    color =
+    local color =
         self:Hex(
         self.menu.xerathDraw.r.ra:get(),
         self.menu.xerathDraw.r.rr:get(),
@@ -191,7 +188,7 @@ function Xerath:OnDraw()
         end
         if self.menu.xerathDraw.r.rmini:get() then
             local radius = TacticalMap.width * self.r.range / 14692
-            self:DrawMinimapCircle(myHero, self.r.range, color)
+            DrawMinimapCircle(myHero, self.r.range, color)
             --DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
         end
     end
@@ -200,68 +197,38 @@ function Xerath:OnDraw()
     end
 end
 
-function Xerath:CastQ(target)
+function Xerath:CastQ(pred)
     local isQActive, remainingTime = self:IsQActive()
 
-    if myHero.spellbook:CanUseSpell(0) == 0 then
-        self.q.range = isQActive and self:GetQRange(remainingTime) or self.q.max
+    local range = isQActive and self:GetQRange(remainingTime) or self.q.max
 
-        local pred = _G.Prediction.GetPrediction(target, self.q, myHero)
-        if
-            pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                GetDistanceSqr(pred.castPosition) <= self.q.range * self.q.range
-         then
-            if isQActive then
-                myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
-                return true
-            else
-                myHero.spellbook:CastSpell(0, pred.castPosition)
-            end
-        end
-    end
-end
+    if GetDistanceSqr(pred.castPosition) < range * range then
+        if isQActive then
+            myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
 
-function Xerath:CastW1(target)
-    if myHero.spellbook:CanUseSpell(1) == 0 then
-        local pred = _G.Prediction.GetPrediction(target, self.w1, myHero)
-        if
-            pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                GetDistanceSqr(pred.castPosition) <= self.w1.range * self.w1.range
-         then
-            myHero.spellbook:CastSpell(1, pred.castPosition)
+            pred.drawRange = range -- So debug draw shows it at the correct range rather than the self.q.max we passed in
+            pred:draw()
+
+            self.LastCasts.Q = RiotClock.time
+
+            return true
+        else
+            myHero.spellbook:CastSpell(0, pred.castPosition)
             return true
         end
     end
 end
 
-function Xerath:CastW2(target)
-    if myHero.spellbook:CanUseSpell(1) == 0 then
-        local pred = _G.Prediction.GetPrediction(target, self.w2, myHero)
-        if
-            pred and pred.castPosition and pred.hitChance >= self.menu.wc:get() / 100 and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                GetDistanceSqr(pred.castPosition) <= self.w2.range * self.w2.range
-         then
-            myHero.spellbook:CastSpell(1, pred.castPosition)
-            return true
-        end
-    end
+function Xerath:CastW(pred)
+    myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
+    pred:draw()
+    return true
 end
 
-function Xerath:CastE(target)
-    if myHero.spellbook:CanUseSpell(2) == 0 then
-        local pred = _G.Prediction.GetPrediction(target, self.e, myHero)
-        if
-            pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                not pred:windWallCollision() and
-                not pred:minionCollision() and
-                pred.hitChance >= self.menu.e:get() / 100 and
-                GetDistanceSqr(pred.castPosition) <= self.e.range * self.e.range
-         then
-            myHero.spellbook:CastSpell(2, pred.castPosition)
-            return true
-        end
-    end
+function Xerath:CastE(pred)
+    myHero.spellbook:CastSpell(2, pred.castPosition)
+    pred:draw()
+    return true
 end
 
 function Xerath:GetRRange()
@@ -271,31 +238,14 @@ end
 function Xerath:CastR()
     self.r.range = self:GetRRange()
     if myHero.spellbook:CanUseSpell(3) == 0 and self.menu.tap:get() then
-        local targets = self:GetTarget(self.r.range, true)
-        local targetMouse, targetGen = nil, nil
-        for _, target in ipairs(targets) do
-            if not targetGen then
-                targetGen = target
-            end
-            if
-                not targetMouse and
-                    GetDistanceSqr(pwHud.hudManager.virtualCursorPos, target.position) <=
-                        self.menu.rr:get() * self.menu.rr:get()
-             then
-                targetMouse = target
-            end
-        end
-        local target = targetMouse or targetGen
-        if target then
-            local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
-            if
-                pred and pred.castPosition and
-                    (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                    GetDistanceSqr(pred.castPosition) <= self.r.range * self.r.range
-             then
-                myHero.spellbook:CastSpell(3, pred.castPosition)
-                return true
-            end
+
+        local maxRangeSqr = self.menu.rr:get() * self.menu.rr:get()
+        local target, pred = self:GetTarget(self.r, false, function(unit) return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr end)
+
+        if target and pred and pred.castPosition then
+            myHero.spellbook:CastSpell(3, pred.castPosition)
+            pred:draw()
+            return true
         end
     end
 end
@@ -305,44 +255,69 @@ function Xerath:OnTick()
     local rActive = self:IsRActive()
 
     if qActive or rActive then
-        LegitOrbwalker:BlockAttack(true)
+        Orbwalker:BlockAttack(true)
     else
-        LegitOrbwalker:BlockAttack(false)
+        Orbwalker:BlockAttack(false)
     end
 
-    if rActive then
-        if self:CastR() then
-            return
-        end
-    end
-    for _, target in ipairs(self:GetTarget(self.e.range, true)) do
-        if self.menu.antigap[target.charName] and self.menu.antigap[target.charName]:get() then
-            local _, canHit = _G.Prediction.IsDashing(target, self.e, myHero)
-            if canHit then
-                self:CastE(target)
-            end
-        end
-        if LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and self:CastE(target) then
-            return
-        end
-    end
-    local target = self:GetTarget(self.w1.range)
-    if target then
-        if LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() then
-            if self:CastW2(target) then
-                return
-            end
-            if self:CastW1(target) then
+    -- Will waste pred calls without these conditions as well as call Cast when can't cast
+    if not qActive and RiotClock.time > self.LastCasts.Q + 0.5 then
+        if rActive and RiotClock.time > self.LastCasts.R + 0.25 then
+            if self:CastR() then
                 return
             end
         end
+
+        if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 and RiotClock.time > self.LastCasts.E + 0.25 then
+            local gapcloser_target, gapcloser_pred = self:GetTarget(self.e, false, 
+                                                                        function(unit) return self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get() end,
+                                                                        function(unit, pred) return pred and pred.targetDashing end
+            )
+
+            if gapcloser_target and self:CastE(gapcloser_pred) then
+                return
+            end
+
+            local e_target, e_pred = self:GetTarget(self.e)
+
+            if e_target and Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and self:CastE(e_pred) then
+                return
+            end
+        end
+
+
+        if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and RiotClock.time > self.LastCasts.W + 0.25 then
+            local w2_target, w2_pred = self:GetTarget(self.w2)
+            if w2_target then
+                if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
+                    if self:CastW(w2_pred) then
+                        return
+                    end
+                end
+            end
+            local w1_target, w1_pred = self:GetTarget(self.w1)
+            if w1_target then
+                if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
+                    if self:CastW(w1_pred) then
+                        return
+                    end
+                end
+            end
+        end
     end
-    target = self:GetTarget(self.q.max)
-    if target then
-        if LegitOrbwalker:GetMode() == "Combo" and not LegitOrbwalker:IsAttacking() and self:CastQ(target) then
-            return
-        elseif LegitOrbwalker:GetMode() == "Harass" and not LegitOrbwalker:IsAttacking() and self:CastQ(target) then
-            return
+
+    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 then
+        self.q.range = self.q.max
+
+        if (qActive and RiotClock.time > self.LastCasts.Q + 0.5) or not qActive then
+            local q_target, q_pred = self:GetTarget(self.q)
+            if q_target then
+                if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
+                    return
+                elseif Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
+                    return
+                end
+            end
         end
     end
 end
@@ -383,23 +358,17 @@ function Xerath:GetQRange(remainingTime)
     )
 end
 
-function Xerath:OnNewPath(obj, paths, isWalk, dashspeed)
-end
-
 function Xerath:Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
 end
 
-function Xerath:GetTarget(dist, all)
-    self.TS.ValidTarget = function(unit)
-        return _G.Prediction.IsValidTarget(unit, dist)
-    end
-    local res = self.TS:update()
+function Xerath:GetTarget(spell, all, targetFilter, predFilter)
+    local units, preds = self.TS:GetTargets(spell, myHero.position, targetFilter, predFilter)
     if all then
-        return res
+        return units, preds
     else
-        if res and res[1] then
-            return res[1]
+        if units and units[1] then
+            return units[1], preds[units[1].networkId]
         end
     end
 end
