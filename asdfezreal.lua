@@ -1,18 +1,24 @@
 local Ezreal = {}
-local version = 1
---[[if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
+local version = 1.2
+if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
-end--]]
+end
 require "FF15Menu"
 require "utils"
 local DreamTS = require("DreamTS")
 local dmgLib = require("FF15DamageLib")
+local Orbwalker = require "FF15OL"
 
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
+    if not _G.AuroraOrb and not _G.LegitOrbwalker then
+        LoadPaidScript(PaidScript.AURORA_BUNDLE)
+    end
+
+    Orbwalker:Setup()
 end
 
 function Ezreal:__init()
@@ -26,7 +32,7 @@ function Ezreal:__init()
         speed = 1700,
         range = 1150,
         delay = 0.25,
-        width = 165
+        width = 160
     }
     self.r = {
         speed = 2000,
@@ -105,6 +111,8 @@ function Ezreal:OnDraw()
                     self.menu.ezrealDraw.q1b:get()
                 )
             )
+            text = "AutoQ on"
+
         else
             DrawHandler:Circle3D(
                 myHero.position,
@@ -116,8 +124,12 @@ function Ezreal:OnDraw()
                     self.menu.ezrealDraw.q0b:get()
                 )
             )
+            text = "AutoQ off"
+
         end
     end
+    DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
+
     if self.wBuffTarget then
         DrawHandler:Circle3D(
             self.wBuffTarget.position,
@@ -193,14 +205,14 @@ function Ezreal:R(target)
 end
 
 function Ezreal:OnTick()
-    if not LegitOrbwalker:IsAttacking() then
+    if not Orbwalker:IsAttacking() then
         for _, target in ipairs(self:GetTarget(self.r.range, true)) do
             if self.menu.r:get() then
                 if self:CastR(target) then
                     return
                 end
             end
-            if LegitOrbwalker:GetMode() == "Combo" then
+            if Orbwalker:GetMode() == "Combo" then
                 if self:R(target) then
                     return
                 end
@@ -229,14 +241,14 @@ end
 function Ezreal:OnBuffGain(obj, buff)
     if obj and obj.team ~= myHero.team and obj.type == myHero.type and buff.name == "ezrealwattach" then
         self.wBuffTarget = obj
-        LegitOrbwalker:SetForcedTarget(obj)
+        Orbwalker:ForceTarget(obj)
     end
 end
 
 function Ezreal:OnBuffLost(obj, buff)
     if obj and obj.team ~= myHero.team and obj.type == myHero.type and buff.name == "ezrealwattach" then
         self.wBuffTarget = nil
-        LegitOrbwalker:UnsetForcedTarget()
+        Orbwalker:ResetForcedTarget()
     end
 end
 

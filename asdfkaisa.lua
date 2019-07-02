@@ -1,5 +1,5 @@
 local Kaisa = {}
-local version = 1.1
+local version = 1.2
 if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
     DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
@@ -103,9 +103,9 @@ function Kaisa:W()
     local target1 = LegitOrbwalker:GetTarget(self.w.searchRange, "AP", pwHud.hudManager.virtualCursorPos)
     local target2 = LegitOrbwalker:GetTarget(myHero.characterIntermediate.attackRange, "AP", myHero)
     if target1 then
-        self:CastW(target1)
+        self:CastW(target1, true)
     elseif target2 then
-        self:CastW(target2)
+        self:CastW(target2, false)
     else
         --on CC
         for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
@@ -113,17 +113,18 @@ function Kaisa:W()
                 _G.Prediction.IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
                     _G.Prediction.IsImmobile(enemy, GetDistance(enemy) / self.w.speed + self.w.delay)
              then
-                self:CastW(enemy)
+                self:CastW(enemy, true)
             end
         end
     end
 end
 
-function Kaisa:CastW(target)
+function Kaisa:CastW(target, slow)
     if myHero.spellbook:CanUseSpell(1) == 0 and GetDistance(target.position) <= self.w.range then
         local pred = _G.Prediction.GetPrediction(target, self.w, myHero)
         if
-            pred and pred.castPosition and (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
+            pred and pred.castPosition and
+                ((pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) or not slow) and
                 not pred:windWallCollision() and
                 not pred:minionCollision() and
                 GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range
@@ -139,7 +140,9 @@ function Kaisa:OnTick()
     end
     if LegitOrbwalker:GetMode() == "Combo" then
         self:CastQ()
-        self:W()
+        if not LegitOrbwalker:IsAttacking() then
+            self:W()
+        end
     end
 end
 
