@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 1.2
+local version = 1.3
 if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
@@ -25,14 +25,14 @@ function Ezreal:__init()
     self.q = {
         speed = 2000,
         range = 1150,
-        delay = 0.25,
+        delay = 0.35,
         width = 125
     }
     self.w = {
         speed = 1700,
         range = 1150,
-        delay = 0.25,
-        width = 160
+        delay = 0.35,
+        width = 165
     }
     self.r = {
         speed = 2000,
@@ -86,6 +86,7 @@ function Ezreal:Menu()
     self.menu = Menu("asdfezreal", "Ezreal")
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("q", "AutoQ", true, string.byte("T"))
+    self.menu:checkbox("user", "Use R", true)
     self.menu:key("r", "Manual R Key", 0x5A)
     self.menu:sub("ezrealDraw", "Draw")
     self.menu.ezrealDraw:checkbox("q", "Q", true)
@@ -213,7 +214,7 @@ function Ezreal:OnTick()
                 end
             end
             if Orbwalker:GetMode() == "Combo" then
-                if self:R(target) then
+                if self.menu.user:get() and self:R(target) then
                     return
                 end
                 local wTarget = self:GetTarget(self.w.range)
