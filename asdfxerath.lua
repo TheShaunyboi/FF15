@@ -33,7 +33,7 @@ function Xerath:__init()
     self.w1 = {
         type = "circular",
         range = 1000,
-        delay = 0.83,
+        delay = 0.75,
         radius = 250,
         speed = math.huge,
         castRate = "slow"
@@ -41,7 +41,7 @@ function Xerath:__init()
     self.w2 = {
         type = "circular",
         range = 1000,
-        delay = 0.83,
+        delay = 0.75,
         radius = 123,
         speed = math.huge,
         castRate = "slow"
@@ -64,7 +64,7 @@ function Xerath:__init()
         type = "circular",
         active = false,
         range = 80000,
-        delay = 0.7,
+        delay = 0.6,
         radius = 200,
         speed = math.huge,
         castRate = "slow"

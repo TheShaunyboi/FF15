@@ -25,13 +25,13 @@ function Ezreal:__init()
     self.q = {
         speed = 2000,
         range = 1150,
-        delay = 0.35,
+        delay = 0.25,
         width = 125
     }
     self.w = {
         speed = 1700,
         range = 1150,
-        delay = 0.35,
+        delay = 0.25,
         width = 165
     }
     self.r = {

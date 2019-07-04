@@ -1,5 +1,5 @@
 local Kaisa = {}
-local version = 1.2
+local version = 1.3
 if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
     DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
@@ -11,10 +11,15 @@ function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
+    if not _G.AuroraOrb and not _G.LegitOrbwalker then
+        LoadPaidScript(PaidScript.AURORA_BUNDLE)
+    end
+
+    Orbwalker:Setup()
 end
 
 function Kaisa:__init()
-    self.qRange = 550
+    self.qRange = 600
     self.w = {
         searchRange = 400,
         speed = 1750,
@@ -94,14 +99,18 @@ function Kaisa:OnDraw()
 end
 
 function Kaisa:CastQ()
-    if myHero.spellbook:CanUseSpell(0) == 0 and LegitOrbwalker:GetTarget(self.qRange, "AP", myHero) then
-        myHero.spellbook:CastSpell(0, pwHud.hudManager.activeVirtualCursorPos)
+    local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient / 1000)
+    for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
+        local enemyPred =_G.Prediction.GetUnitPosition(enemy, NetClient / 1000)
+        if GetDistanceSqr(myHeroPred, enemyPred) < self.qRange * self.qRange then
+            myHero.spellbook:CastSpell(0, pwHud.hudManager.activeVirtualCursorPos)
+        end
     end
 end
 
 function Kaisa:W()
-    local target1 = LegitOrbwalker:GetTarget(self.w.searchRange, "AP", pwHud.hudManager.virtualCursorPos)
-    local target2 = LegitOrbwalker:GetTarget(myHero.characterIntermediate.attackRange, "AP", myHero)
+    local target1 = Orbwalker:GetTarget(self.w.searchRange, "AP", pwHud.hudManager.virtualCursorPos)
+    local target2 = Orbwalker:GetTarget(myHero.characterIntermediate.attackRange, "AP", myHero)
     if target1 then
         self:CastW(target1, true)
     elseif target2 then
@@ -138,9 +147,9 @@ function Kaisa:OnTick()
     if self.menu.q:get() then
         self:CastQ()
     end
-    if LegitOrbwalker:GetMode() == "Combo" then
+    if Orbwalker:GetMode() == "Combo" then
         self:CastQ()
-        if not LegitOrbwalker:IsAttacking() then
+        if not Orbwalker:IsAttacking() then
             self:W()
         end
     end
@@ -148,13 +157,13 @@ end
 
 function Kaisa:OnBuffGain(obj, buff)
     if obj == myHero and buff.name == "KaisaE" then
-        LegitOrbwalker:BlockAttack(true)
+        Orbwalker:BlockAttack(true)
     end
 end
 
 function Kaisa:OnBuffLost(obj, buff)
     if obj == myHero and buff.name == "KaisaE" then
-        LegitOrbwalker:BlockAttack(false)
+        Orbwalker:BlockAttack(false)
     end
 end
 
