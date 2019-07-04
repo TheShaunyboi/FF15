@@ -6,6 +6,8 @@ if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
 end
 require "FF15Menu"
 require "utils"
+local Orbwalker = require "FF15OL"
+
 
 function OnLoad()
     if not _G.Prediction then
@@ -99,11 +101,15 @@ function Kaisa:OnDraw()
 end
 
 function Kaisa:CastQ()
-    local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient / 1000)
-    for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
-        local enemyPred =_G.Prediction.GetUnitPosition(enemy, NetClient / 1000)
-        if GetDistanceSqr(myHeroPred, enemyPred) < self.qRange * self.qRange then
-            myHero.spellbook:CastSpell(0, pwHud.hudManager.activeVirtualCursorPos)
+    if myHero.spellbook:CanUseSpell(0) == 0 then
+        local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
+        for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
+            if _G.Prediction.IsValidTarget(enemy, 1000) then
+                local enemyPred = _G.Prediction.GetUnitPosition(enemy, NetClient.ping / 1000)
+                if GetDistanceSqr(myHeroPred, enemyPred) < self.qRange * self.qRange then
+                    myHero.spellbook:CastSpell(0, pwHud.hudManager.activeVirtualCursorPos)
+                end
+            end
         end
     end
 end
