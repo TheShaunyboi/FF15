@@ -20,8 +20,9 @@ function Karthus:__init()
         type = "circular",
         speed = math.huge,
         range = 875,
-        delay = 1.02,
+        delay = 1,
         radius = 195,
+        castRate = "very slow",
         damage = function(unit)
             return dmgLib:CalculateMagicDamage(
                 myHero,
@@ -36,7 +37,8 @@ function Karthus:__init()
         speed = math.huge,
         range = 1000,
         delay = 0.4,
-        radius = 80
+        radius = 80,
+        castRate = "very slow"
     }
     self.e = {
         range = 500,
@@ -148,10 +150,7 @@ end
 function Karthus:CastQ(target)
     if myHero.spellbook:CanUseSpell(0) == 0 then
         local pred = _G.Prediction.GetPrediction(target, self.q, myHero)
-        if
-            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.q.range * self.q.range and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
-         then
+        if pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.q.range * self.q.range then
             myHero.spellbook:CastSpell(0, pred.castPosition)
             return true
         end
@@ -160,10 +159,7 @@ end
 function Karthus:CastW(target)
     if myHero.spellbook:CanUseSpell(1) == 0 then
         local pred = _G.Prediction.GetPrediction(target, self.w, myHero)
-        if
-            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target))
-         then
+        if pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range then
             myHero.spellbook:CastSpell(1, pred.castPosition)
             return true
         end

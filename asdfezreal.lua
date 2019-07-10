@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 1.3
+local version = 2
 if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
@@ -23,22 +23,37 @@ end
 
 function Ezreal:__init()
     self.q = {
+        type = "linear",
         speed = 2000,
         range = 1150,
         delay = 0.25,
-        width = 125
+        width = 125,
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
     }
     self.w = {
+        type = "linear",
         speed = 1700,
         range = 1150,
         delay = 0.25,
-        width = 165
+        width = 165,
+        castRate = "very slow",
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = false
+        }
     }
     self.r = {
+        type = "linear",
         speed = 2000,
         range = 2500,
         delay = 1,
-        width = 325
+        width = 325,
+        castRate = "very slow"
     }
     self.wBuffTarget = nil
     self:Menu()
@@ -46,12 +61,7 @@ function Ezreal:__init()
         DreamTS(
         self.menu.dreamTs,
         {
-            ValidTarget = function(unit)
-                return _G.Prediction.IsValidTarget(unit, self.r.range)
-            end,
-            Damage = function(unit)
-                return dmgLib:CalculateMagicDamage(myHero, unit, 100)
-            end
+            Damage = DreamTS.Damages.AD
         }
     )
     AddEvent(
@@ -113,7 +123,6 @@ function Ezreal:OnDraw()
                 )
             )
             text = "AutoQ on"
-
         else
             DrawHandler:Circle3D(
                 myHero.position,
@@ -126,7 +135,6 @@ function Ezreal:OnDraw()
                 )
             )
             text = "AutoQ off"
-
         end
     end
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
@@ -145,94 +153,72 @@ function Ezreal:OnDraw()
     end
 end
 
-function Ezreal:CastQ(target)
-    if myHero.spellbook:CanUseSpell(0) == 0 then
-        local pred = _G.Prediction.GetPrediction(target, self.q, myHero)
-        if
-            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.q.range * self.q.range and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target) or
-                    GetDistanceSqr(pred.castPosition) <= 400 * 400) and
-                not pred:windWallCollision() and
-                not pred:minionCollision()
-         then
-            myHero.spellbook:CastSpell(0, pred.castPosition)
-            return true
-        end
-    end
-end
-function Ezreal:CastW(target)
-    if myHero.spellbook:CanUseSpell(1) == 0 then
-        local pred = _G.Prediction.GetPrediction(target, self.w, myHero)
-        if
-            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                not pred:windWallCollision()
-         then
-            myHero.spellbook:CastSpell(1, pred.castPosition)
-            return true
-        end
-    end
-end
-
-function Ezreal:CastR(target)
-    if myHero.spellbook:CanUseSpell(3) == 0 then
-        local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
-        if
-            pred and pred.castPosition and GetDistanceSqr(pred.castPosition) <= self.r.range * self.r.range and
-                (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-                not pred:windWallCollision()
-         then
-            myHero.spellbook:CastSpell(3, pred.castPosition)
-            return true
-        end
-    end
-end
-
-function Ezreal:R(target)
-    if _G.Prediction.IsImmobile(target, GetDistance(target) / self.r.speed + self.r.delay) then
-        self:CastR(target)
-        return true
-    end
-    local pred = _G.Prediction.GetPrediction(target, self.r, myHero)
-    if
-        pred and pred.realHitChance > 0 and pred.castPosition and
-            (pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) and
-            pred:heroCollision(2) and
-            not pred:windWallCollision()
-     then
-        myHero.spellbook:CastSpell(3, pred.castPosition)
-        return true
-    end
-end
-
 function Ezreal:OnTick()
     if not Orbwalker:IsAttacking() then
-        for _, target in ipairs(self:GetTarget(self.r.range, true)) do
-            if self.menu.r:get() then
-                if self:CastR(target) then
-                    return
+        if self.menu.r:get() and myHero.spellbook:CanUseSpell(3) == 0 then
+            local rTarget, rPred = self:GetTarget(self.r)
+            if rTarget and rPred then
+                myHero.spellbook:CastSpell(3, rPred.castPosition)
+            end
+        end
+        if Orbwalker:GetMode() == "Combo" then
+            if self.menu.user:get() and myHero.spellbook:CanUseSpell(3) == 0 then
+                local rTarget, rPred =
+                    self:GetTarget(
+                    self.r,
+                    false,
+                    nil,
+                    function(unit, pred)
+                        return pred:heroCollision(2)
+                    end
+                )
+                if rTarget and rPred then
+                    myHero.spellbook:CastSpell(3, rPred.castPosition)
                 end
             end
-            if Orbwalker:GetMode() == "Combo" then
-                if self.menu.user:get() and self:R(target) then
-                    return
+            if myHero.spellbook:CanUseSpell(1) == 0 then
+                local wTarget, wPred = self:GetTarget(self.w)
+                if wTarget and wPred then
+                    myHero.spellbook:CastSpell(1, wPred.castPosition)
                 end
-                local wTarget = self:GetTarget(self.w.range)
-                if wTarget and self:CastW(wTarget) then
-                    return
+            end
+            if myHero.spellbook:CanUseSpell(0) == 0 then
+                local qTargets, qPred =
+                    self:GetTarget(
+                    self.q,
+                    true,
+                    nil,
+                    function(unit, pred)
+                        return pred.rates["very slow"] or
+                            GetDistanceSqr(pred.castPosition) <
+                                myHero.characterIntermediate.attackRange * myHero.characterIntermediate.attackRange
+                    end
+                )
+                if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
+                    myHero.spellbook:CastSpell(0, qPred[self.wBuffTarget.networkId].castPosition)
                 end
-                if self.wBuffTarget and _G.Prediction.IsValidTarget(self.wBuffTarget, self.q.range) and self:CastQ(self.wBuffTarget) then
-                    return
+                for _, pred in pairs(qPred) do
+                    myHero.spellbook:CastSpell(0, pred.castPosition)
                 end
-                if self:CastQ(target) then
-                    return
+            end
+        elseif self.menu.q:get() and not _G.Prediction.IsRecalling(myHero) then
+            if myHero.spellbook:CanUseSpell(0) == 0 then
+                local qTargets, qPred =
+                    self:GetTarget(
+                    self.q,
+                    true,
+                    nil,
+                    function(unit, pred)
+                        return pred.rates["very slow"] or
+                            GetDistanceSqr(pred.castPosition) <
+                                myHero.characterIntermediate.attackRange * myHero.characterIntermediate.attackRange
+                    end
+                )
+                if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
+                    myHero.spellbook:CastSpell(0, qPred[self.wBuffTarget.networkId].castPosition)
                 end
-            elseif self.menu.q:get() and not _G.Prediction.IsRecalling(myHero) then
-                if self.wBuffTarget and _G.Prediction.IsValidTarget(self.wBuffTarget, self.q.range) then
-                    self:CastQ(self.wBuffTarget)
-                end
-                if self:CastQ(target) then
-                    return
+                for _, pred in pairs(qPred) do
+                    myHero.spellbook:CastSpell(0, pred.castPosition)
                 end
             end
         end
@@ -257,16 +243,14 @@ function Ezreal:Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
 end
 
-function Ezreal:GetTarget(dist, all)
-    self.TS.ValidTarget = function(unit)
-        return _G.Prediction.IsValidTarget(unit, dist)
-    end
-    local res = self.TS:update()
+function Ezreal:GetTarget(spell, all, targetFilter, predFilter)
+    local units, preds = self.TS:GetTargets(spell, myHero.position, targetFilter, predFilter)
     if all then
-        return res
+        return units, preds
     else
-        if res and res[1] then
-            return res[1]
+        local target = self.TS.target
+        if target then
+            return target, preds[target.networkId]
         end
     end
 end

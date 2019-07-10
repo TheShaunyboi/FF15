@@ -1,5 +1,9 @@
+if myHero.charName ~= "Xerath" then
+    return
+end
+
 local Xerath = {}
-local version = 2
+local version = 2.2
 if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
@@ -27,16 +31,15 @@ function Xerath:__init()
         range = 1450,
         delay = 0.6,
         width = 145,
-        speed = math.huge,
-        castRate = "slow"
+        speed = math.huge
     }
     self.w1 = {
         type = "circular",
         range = 1000,
         delay = 0.75,
-        radius = 250,
+        radius = 270,
         speed = math.huge,
-        castRate = "slow"
+        castRate = "very slow"
     }
     self.w2 = {
         type = "circular",
@@ -44,7 +47,7 @@ function Xerath:__init()
         delay = 0.75,
         radius = 123,
         speed = math.huge,
-        castRate = "slow"
+        castRate = "very slow"
     }
     self.e = {
         type = "linear",
@@ -52,9 +55,8 @@ function Xerath:__init()
         delay = 0.25,
         width = 125,
         speed = 1400,
-        castRate = "slow",
-        collision =
-        {
+        castRate = "very slow",
+        collision = {
             ["Wall"] = true,
             ["Hero"] = true,
             ["Minion"] = true
@@ -64,14 +66,20 @@ function Xerath:__init()
         type = "circular",
         active = false,
         range = 80000,
-        delay = 0.6,
+        delay = 0.7,
         radius = 200,
         speed = math.huge,
-        castRate = "slow"
+        castRate = "very slow"
     }
 
-    self.LastCasts =
-    {
+    self.WindUpTimes = {
+        Q = 0.5,
+        W = 0.25,
+        E = 0.25,
+        R = 0.25
+    }
+
+    self.LastCasts = {
         Q = 0,
         W = 0,
         E = 0,
@@ -83,9 +91,6 @@ function Xerath:__init()
         DreamTS(
         self.menu.dreamTs,
         {
-            ValidTarget = function(unit) -- only used by DreamTS:update()
-                return _G.Prediction.IsValidTarget(unit)
-            end,
             Damage = DreamTS.Damages.AP
         }
     )
@@ -146,12 +151,18 @@ local function DrawMinimapCircle(pos3d, radius, color)
     end
 
     for i = 1, #pts - 1 do
-        DrawHandler:Line(
-            pts[i],
-            pts[i + 1],
-            color
-        )
+        DrawHandler:Line(pts[i], pts[i + 1], color)
     end
+end
+
+function Xerath:ShouldCast()
+    for spell, time in pairs(self.LastCasts) do
+        if RiotClock.time < time + self.WindUpTimes[spell] then
+            return false
+        end
+    end
+
+    return true
 end
 
 function Xerath:OnDraw()
@@ -189,7 +200,7 @@ function Xerath:OnDraw()
         if self.menu.xerathDraw.r.rmini:get() then
             local radius = TacticalMap.width * self.r.range / 14692
             DrawMinimapCircle(myHero, self.r.range, color)
-            --DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
+        --DrawHandler:Circle(TacticalMap:WorldToMinimap(myHero.position), self.r.range, color)
         end
     end
     if self:IsRActive() then
@@ -201,32 +212,33 @@ function Xerath:CastQ(pred)
     local isQActive, remainingTime = self:IsQActive()
 
     local range = isQActive and self:GetQRange(remainingTime) or self.q.max
+    local rangeAdjust = range - 100
 
-    if GetDistanceSqr(pred.castPosition) < range * range then
-        if isQActive then
-            myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
+    if isQActive and pred.rates["very slow"] and GetDistanceSqr(pred.castPosition) < range * range then
+        myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
 
-            pred.drawRange = range -- So debug draw shows it at the correct range rather than the self.q.max we passed in
-            pred:draw()
+        pred.drawRange = range -- So debug draw shows it at the correct range rather than always self.q.max
+        pred:draw()
 
-            self.LastCasts.Q = RiotClock.time
+        self.LastCasts.Q = RiotClock.time
 
-            return true
-        else
-            myHero.spellbook:CastSpell(0, pred.castPosition)
-            return true
-        end
+        return true
+    elseif pred.rates["instant"] then
+        myHero.spellbook:CastSpell(0, pwHud.hudManager.virtualCursorPos)
+        return true
     end
 end
 
 function Xerath:CastW(pred)
     myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
+    self.LastCasts.W = RiotClock.time
     pred:draw()
     return true
 end
 
 function Xerath:CastE(pred)
     myHero.spellbook:CastSpell(2, pred.castPosition)
+    self.LastCasts.E = RiotClock.time
     pred:draw()
     return true
 end
@@ -238,12 +250,19 @@ end
 function Xerath:CastR()
     self.r.range = self:GetRRange()
     if myHero.spellbook:CanUseSpell(3) == 0 and self.menu.tap:get() then
-
         local maxRangeSqr = self.menu.rr:get() * self.menu.rr:get()
-        local target, pred = self:GetTarget(self.r, false, function(unit) return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr end)
+        local target, pred =
+            self:GetTarget(
+            self.r,
+            false,
+            function(unit)
+                return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr
+            end
+        )
 
         if target and pred and pred.castPosition then
             myHero.spellbook:CastSpell(3, pred.castPosition)
+            self.LastCasts.R = RiotClock.time
             pred:draw()
             return true
         end
@@ -261,34 +280,46 @@ function Xerath:OnTick()
     end
 
     -- Will waste pred calls without these conditions as well as call Cast when can't cast
-    if not qActive and RiotClock.time > self.LastCasts.Q + 0.5 then
-        if rActive and RiotClock.time > self.LastCasts.R + 0.25 then
+    if not qActive and self:ShouldCast() then
+        if rActive then
             if self:CastR() then
                 return
             end
         end
 
-        if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 and RiotClock.time > self.LastCasts.E + 0.25 then
-            local gapcloser_target, gapcloser_pred = self:GetTarget(self.e, false, 
-                                                                        function(unit) return self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get() end,
-                                                                        function(unit, pred) return pred and pred.targetDashing end
+        if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
+            local gapcloser_targets, gapcloser_preds =
+                self:GetTarget(
+                self.e,
+                true,
+                function(unit)
+                    return self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get()
+                end,
+                function(unit, pred)
+                    return pred and pred.targetDashing
+                end
             )
 
-            if gapcloser_target and self:CastE(gapcloser_pred) then
-                return
+            for i = 1, #gapcloser_targets do
+                local pred = gapcloser_preds[gapcloser_targets[i].networkId]
+                if pred and self:CastE(pred) then
+                    return
+                end
             end
 
             local e_target, e_pred = self:GetTarget(self.e)
 
-            if e_target and Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and self:CastE(e_pred) then
+            if
+                e_target and e_pred and Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and
+                    self:CastE(e_pred)
+             then
                 return
             end
         end
 
-
-        if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and RiotClock.time > self.LastCasts.W + 0.25 then
+        if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 then
             local w2_target, w2_pred = self:GetTarget(self.w2)
-            if w2_target then
+            if w2_target and w2_pred then
                 if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
                     if self:CastW(w2_pred) then
                         return
@@ -296,7 +327,7 @@ function Xerath:OnTick()
                 end
             end
             local w1_target, w1_pred = self:GetTarget(self.w1)
-            if w1_target then
+            if w1_target and w1_pred then
                 if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
                     if self:CastW(w1_pred) then
                         return
@@ -306,17 +337,23 @@ function Xerath:OnTick()
         end
     end
 
-    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 then
+    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() then
         self.q.range = self.q.max
 
-        if (qActive and RiotClock.time > self.LastCasts.Q + 0.5) or not qActive then
-            local q_target, q_pred = self:GetTarget(self.q)
-            if q_target then
-                if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
-                    return
-                elseif Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
-                    return
-                end
+        local q_target, q_pred =
+            self:GetTarget(
+            self.q,
+            false,
+            nil,
+            function(unit, pred)
+                return pred.rates["instant"]
+            end
+        )
+        if q_target and q_pred then
+            if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
+                return
+            elseif Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
+                return
             end
         end
     end
@@ -367,8 +404,9 @@ function Xerath:GetTarget(spell, all, targetFilter, predFilter)
     if all then
         return units, preds
     else
-        if units and units[1] then
-            return units[1], preds[units[1].networkId]
+        local target = self.TS.target
+        if target then
+            return target, preds[target.networkId]
         end
     end
 end

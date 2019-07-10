@@ -1,5 +1,5 @@
 local Sona = {}
-local version = 1
+local version = 1.1
 if tonumber(GetInternalWebResult("asdfsona.version")) > version then
     DownloadInternalFile("asdfsona.lua", SCRIPT_PATH .. "asdfsona.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfsona.version")) .. " Press F5")
@@ -21,7 +21,7 @@ function Sona:__init()
         range = 1000,
         delay = 0.25,
         width = 275,
-        castRate = "slow"
+        castRate = "very slow"
     }
     self:Menu()
     AddEvent(
