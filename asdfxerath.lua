@@ -2,8 +2,10 @@ if myHero.charName ~= "Xerath" then
     return
 end
 
+local CastMode = "slow"
+
 local Xerath = {}
-local version = 2.2
+local version = 2.3
 if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
@@ -29,25 +31,25 @@ function Xerath:__init()
         max = 1500,
         charge = 1.2,
         range = 1450,
-        delay = 0.6,
+        delay = 0.65,
         width = 145,
         speed = math.huge
     }
     self.w1 = {
         type = "circular",
         range = 1000,
-        delay = 0.75,
+        delay = 0.83,
         radius = 270,
         speed = math.huge,
-        castRate = "very slow"
+        castRate = CastMode
     }
     self.w2 = {
         type = "circular",
         range = 1000,
-        delay = 0.75,
-        radius = 123,
+        delay = 0.83 ,
+        radius = 270,
         speed = math.huge,
-        castRate = "very slow"
+        castRate = CastMode
     }
     self.e = {
         type = "linear",
@@ -55,7 +57,7 @@ function Xerath:__init()
         delay = 0.25,
         width = 125,
         speed = 1400,
-        castRate = "very slow",
+        castRate = CastMode,
         collision = {
             ["Wall"] = true,
             ["Hero"] = true,
@@ -69,7 +71,7 @@ function Xerath:__init()
         delay = 0.7,
         radius = 200,
         speed = math.huge,
-        castRate = "very slow"
+        castRate = CastMode
     }
 
     self.WindUpTimes = {
@@ -81,7 +83,7 @@ function Xerath:__init()
 
     self.LastCasts = {
         Q = 0,
-        W = 0,
+        W = 0,  
         E = 0,
         R = 0
     }
@@ -89,10 +91,10 @@ function Xerath:__init()
     self:Menu()
     self.TS =
         DreamTS(
-        self.menu.dreamTs,
-        {
-            Damage = DreamTS.Damages.AP
-        }
+            self.menu.dreamTs,
+            {
+                Damage = DreamTS.Damages.AP
+            }
     )
     AddEvent(
         Events.OnTick,
@@ -112,15 +114,18 @@ end
 
 function Xerath:Menu()
     self.menu = Menu("asdfxerath", "Xerath")
-    self.menu:sub("dreamTs", "Target Selector")
 
-    self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
+    self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("antigap", "Anti Gapclose")
     self.antiGapHeros = {}
     for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
         self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
         self.antiGapHeros[enemy.networkId] = true
     end
+    self.menu:sub("interrupt", "Interrupter")
+    _G.Prediction.LoadInterruptToMenu(self.menu.interrupt)
+
+    self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Tap Key", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
     self.menu.xerathDraw:sub("q", "Q")
@@ -177,7 +182,7 @@ function Xerath:OnDraw()
         DrawHandler:Circle3D(
             myHero.position,
             range,
-            self:Hex(
+            self.Hex(
                 self.menu.xerathDraw.q.qa:get(),
                 self.menu.xerathDraw.q.qr:get(),
                 self.menu.xerathDraw.q.qg:get(),
@@ -186,7 +191,7 @@ function Xerath:OnDraw()
         )
     end
     local color =
-        self:Hex(
+        self.Hex(
         self.menu.xerathDraw.r.ra:get(),
         self.menu.xerathDraw.r.rr:get(),
         self.menu.xerathDraw.r.rg:get(),
@@ -214,15 +219,29 @@ function Xerath:CastQ(pred)
     local range = isQActive and self:GetQRange(remainingTime) or self.q.max
     local rangeAdjust = range - 100
 
-    if isQActive and pred.rates["very slow"] and GetDistanceSqr(pred.castPosition) < range * range then
-        myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
+    if isQActive then
+        if pred.rates[CastMode] then
+            local dist = GetDistanceSqr(pred.castPosition)
 
-        pred.drawRange = range -- So debug draw shows it at the correct range rather than always self.q.max
-        pred:draw()
+            if pred.isMoving and not pred.targetDashing then
+                if dist > rangeAdjust * rangeAdjust then
+                    return
+                end
+            else
+                if dist > range * range then
+                    return
+                end
+            end
 
-        self.LastCasts.Q = RiotClock.time
+            myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
 
-        return true
+            pred.drawRange = range -- So debug draw shows it at the correct range rather than always self.q.max
+            pred:draw()
+
+            self.LastCasts.Q = RiotClock.time
+
+            return true
+        end
     elseif pred.rates["instant"] then
         myHero.spellbook:CastSpell(0, pwHud.hudManager.virtualCursorPos)
         return true
@@ -289,14 +308,16 @@ function Xerath:OnTick()
 
         if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
             local gapcloser_targets, gapcloser_preds =
-                self:GetTarget(
-                self.e,
-                true,
-                function(unit)
-                    return self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get()
-                end,
+                self:GetTarget(self.e, true, nil,
                 function(unit, pred)
-                    return pred and pred.targetDashing
+                    if self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get() then
+                        return pred and pred.targetDashing
+                    end
+                    if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() then
+                        return true
+                    end
+
+                    return false
                 end
             )
 
@@ -395,7 +416,7 @@ function Xerath:GetQRange(remainingTime)
     )
 end
 
-function Xerath:Hex(a, r, g, b)
+function Xerath.Hex(a, r, g, b)
     return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
 end
 
