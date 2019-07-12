@@ -5,7 +5,7 @@ end
 local CastMode = "slow"
 
 local Xerath = {}
-local version = 2.3
+local version = 2.31
 if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
@@ -20,7 +20,9 @@ function OnLoad()
     if not _G.Prediction then
         _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
     end
+
     Orbwalker:Setup()
+    Xerath:__init()
 end
 
 function Xerath:__init()
@@ -64,14 +66,28 @@ function Xerath:__init()
             ["Minion"] = true
         }
     }
+    self.e = {
+        type = "linear",
+        range = 1000,
+        delay = 0.25,
+        width = 125,
+        speed = 1400,
+        castRate = CastMode,
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
+    }
     self.r = {
         type = "circular",
         active = false,
         range = 80000,
-        delay = 0.7,
+        delay = 0.685,
         radius = 200,
         speed = math.huge,
-        castRate = CastMode
+        castRate = "veryslow",
+        ignoreBuffer = true
     }
 
     self.WindUpTimes = {
@@ -183,19 +199,19 @@ function Xerath:OnDraw()
             myHero.position,
             range,
             self.Hex(
-                self.menu.xerathDraw.q.qa:get(),
-                self.menu.xerathDraw.q.qr:get(),
-                self.menu.xerathDraw.q.qg:get(),
-                self.menu.xerathDraw.q.qb:get()
+                self.menu.xerathDraw.q.qa:get() or 255,
+                self.menu.xerathDraw.q.qr:get() or 255,
+                self.menu.xerathDraw.q.qg:get() or 255,
+                self.menu.xerathDraw.q.qb:get() or 255
             )
         )
     end
     local color =
         self.Hex(
-        self.menu.xerathDraw.r.ra:get(),
-        self.menu.xerathDraw.r.rr:get(),
-        self.menu.xerathDraw.r.rg:get(),
-        self.menu.xerathDraw.r.rb:get()
+        self.menu.xerathDraw.r.ra:get() or 255,
+        self.menu.xerathDraw.r.rr:get() or 255,
+        self.menu.xerathDraw.r.rg:get() or 255,
+        self.menu.xerathDraw.r.rb:get() or 255
     )
     if myHero.spellbook:Spell(SpellSlot.R).level > 0 then
         self.r.range = self:GetRRange()
@@ -310,8 +326,10 @@ function Xerath:OnTick()
             local gapcloser_targets, gapcloser_preds =
                 self:GetTarget(self.e, true, nil,
                 function(unit, pred)
-                    if self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get() then
-                        return pred and pred.targetDashing
+                    if not pred then return end
+
+                    if pred.targetDashing and self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get() then
+                        return true
                     end
                     if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() then
                         return true
@@ -430,8 +448,4 @@ function Xerath:GetTarget(spell, all, targetFilter, predFilter)
             return target, preds[target.networkId]
         end
     end
-end
-
-if myHero.charName == "Xerath" then
-    Xerath:__init()
 end
