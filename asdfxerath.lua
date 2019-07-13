@@ -2,9 +2,10 @@ if myHero.charName ~= "Xerath" then
     return
 end
 
+local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
-local version = 2.4
+local version = 2.5
 if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
@@ -36,15 +37,21 @@ function Xerath:__init()
         range = 1450,
         delay = 0.65,
         width = 145,
-        speed = math.huge
+        speed = math.huge,
     }
-    self.w = {
+    self.w1 = {
         type = "circular",
         range = 1000,
         delay = 0.83,
         radius = 270,
         speed = math.huge,
-        castRate = "very slow"
+    }
+    self.w2 = {
+        type = "circular",
+        range = 1000,
+        delay = 0.83 ,
+        radius = 270,
+        speed = math.huge,
     }
     self.e = {
         type = "linear",
@@ -52,7 +59,18 @@ function Xerath:__init()
         delay = 0.25,
         width = 125,
         speed = 1400,
-        castRate = "slow",
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
+    }
+    self.e = {
+        type = "linear",
+        range = 1000,
+        delay = 0.25,
+        width = 125,
+        speed = 1400,
         collision = {
             ["Wall"] = true,
             ["Hero"] = true,
@@ -63,10 +81,9 @@ function Xerath:__init()
         type = "circular",
         active = false,
         range = 80000,
-        delay = 0.685,
+        delay = 0.69,
         radius = 200,
         speed = math.huge,
-        castRate = "very slow",
         ignoreBuffer = true
     }
 
@@ -121,6 +138,12 @@ function Xerath:Menu()
     self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt)
 
+    self.menu:sub("spells", "Spell cast rates")
+    self.menu.spells:list("q", "Q", 2, CastModeOptions)
+    self.menu.spells:list("w", "W", 2, CastModeOptions)
+    self.menu.spells:list("e", "E", 2, CastModeOptions)
+    self.menu.spells:list("r", "R", 2, CastModeOptions)
+
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Tap Key", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
@@ -164,6 +187,10 @@ function Xerath:ShouldCast()
     end
 
     return true
+end
+
+function Xerath:GetCastRate(spell)
+    return CastModeOptions[self.menu.spells[spell].value]
 end
 
 function Xerath:OnDraw()
@@ -217,7 +244,7 @@ function Xerath:CastQ(pred)
 
     if isQActive then
         local dist = GetDistanceSqr(pred.castPosition)
-        if pred.rates["very slow"] or dist < 300 * 300 then
+        if pred.rates[self:GetCastRate("q")] or (dist > 100 * 100 and dist < 400 * 400) then
 
             if pred.isMoving and not pred.targetDashing then
                 if dist > rangeAdjust * rangeAdjust then
@@ -245,17 +272,21 @@ function Xerath:CastQ(pred)
 end
 
 function Xerath:CastW(pred)
-    myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
-    self.LastCasts.W = RiotClock.time
-    pred:draw()
-    return true
+    if pred.rates[self:GetCastRate("w")] then
+        myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
+        self.LastCasts.W = RiotClock.time
+        pred:draw()
+        return true
+    end
 end
 
 function Xerath:CastE(pred)
-    myHero.spellbook:CastSpell(2, pred.castPosition)
-    self.LastCasts.E = RiotClock.time
-    pred:draw()
-    return true
+    if pred.rates[self:GetCastRate("e")] then
+        myHero.spellbook:CastSpell(2, pred.castPosition)
+        self.LastCasts.E = RiotClock.time
+        pred:draw()
+        return true
+    end
 end
 
 function Xerath:GetRRange()
@@ -271,11 +302,12 @@ function Xerath:CastR()
             self.r,
             false,
             function(unit)
-                return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr
+                --return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr
+                return true
             end
         )
 
-        if target and pred and pred.castPosition then
+        if target and pred and pred.rates[self:GetCastRate("r")] then
             myHero.spellbook:CastSpell(3, pred.castPosition)
             self.LastCasts.R = RiotClock.time
             pred:draw()
@@ -337,10 +369,18 @@ function Xerath:OnTick()
         end
 
         if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 then
-            local w_target, w_pred = self:GetTarget(self.w)
-            if w_target and w_pred then
+            local w2_target, w2_pred = self:GetTarget(self.w2)
+            if w2_target and w2_pred then
                 if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
-                    if self:CastW(w_pred) then
+                    if self:CastW(w2_pred) then
+                        return
+                    end
+                end
+            end
+            local w1_target, w1_pred = self:GetTarget(self.w1)
+            if w1_target and w1_pred then
+                if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
+                    if self:CastW(w1_pred) then
                         return
                     end
                 end
