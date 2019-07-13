@@ -5,7 +5,7 @@ end
 local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
-local version = 2.5
+local version = 2.51
 if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
@@ -302,8 +302,7 @@ function Xerath:CastR()
             self.r,
             false,
             function(unit)
-                --return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr
-                return true
+                return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit.position) <= maxRangeSqr
             end
         )
 
