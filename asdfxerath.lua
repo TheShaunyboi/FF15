@@ -2,10 +2,9 @@ if myHero.charName ~= "Xerath" then
     return
 end
 
-local CastMode = "slow"
 
 local Xerath = {}
-local version = 2.31
+local version = 2.4
 if tonumber(GetInternalWebResult("asdfxerath.version")) > version then
     DownloadInternalFile("asdfxerath.lua", SCRIPT_PATH .. "asdfxerath.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfxerath.version")) .. " Press F5")
@@ -20,7 +19,9 @@ function OnLoad()
     if not _G.Prediction then
         _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
     end
-
+    if not _G.AuroraOrb and not _G.LegitOrbwalker then
+        LoadPaidScript(PaidScript.AURORA_BUNDLE)
+    end
     Orbwalker:Setup()
     Xerath:__init()
 end
@@ -37,21 +38,13 @@ function Xerath:__init()
         width = 145,
         speed = math.huge
     }
-    self.w1 = {
+    self.w = {
         type = "circular",
         range = 1000,
         delay = 0.83,
         radius = 270,
         speed = math.huge,
-        castRate = CastMode
-    }
-    self.w2 = {
-        type = "circular",
-        range = 1000,
-        delay = 0.83 ,
-        radius = 270,
-        speed = math.huge,
-        castRate = CastMode
+        castRate = "very slow"
     }
     self.e = {
         type = "linear",
@@ -59,20 +52,7 @@ function Xerath:__init()
         delay = 0.25,
         width = 125,
         speed = 1400,
-        castRate = CastMode,
-        collision = {
-            ["Wall"] = true,
-            ["Hero"] = true,
-            ["Minion"] = true
-        }
-    }
-    self.e = {
-        type = "linear",
-        range = 1000,
-        delay = 0.25,
-        width = 125,
-        speed = 1400,
-        castRate = CastMode,
+        castRate = "slow",
         collision = {
             ["Wall"] = true,
             ["Hero"] = true,
@@ -86,7 +66,7 @@ function Xerath:__init()
         delay = 0.685,
         radius = 200,
         speed = math.huge,
-        castRate = "veryslow",
+        castRate = "very slow",
         ignoreBuffer = true
     }
 
@@ -236,8 +216,8 @@ function Xerath:CastQ(pred)
     local rangeAdjust = range - 100
 
     if isQActive then
-        if pred.rates[CastMode] then
-            local dist = GetDistanceSqr(pred.castPosition)
+        local dist = GetDistanceSqr(pred.castPosition)
+        if pred.rates["very slow"] or dist < 300 * 300 then
 
             if pred.isMoving and not pred.targetDashing then
                 if dist > rangeAdjust * rangeAdjust then
@@ -357,18 +337,10 @@ function Xerath:OnTick()
         end
 
         if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 then
-            local w2_target, w2_pred = self:GetTarget(self.w2)
-            if w2_target and w2_pred then
+            local w_target, w_pred = self:GetTarget(self.w)
+            if w_target and w_pred then
                 if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
-                    if self:CastW(w2_pred) then
-                        return
-                    end
-                end
-            end
-            local w1_target, w1_pred = self:GetTarget(self.w1)
-            if w1_target and w1_pred then
-                if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
-                    if self:CastW(w1_pred) then
+                    if self:CastW(w_pred) then
                         return
                     end
                 end
