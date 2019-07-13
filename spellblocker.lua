@@ -1,6 +1,8 @@
 require "FF15Menu"
 require "utils"
 
+local spells
+
 local SpellBlocker =
     setmetatable(
     {},
@@ -14,17 +16,32 @@ local SpellBlocker =
     }
 )
 
+local activeSpells = {}
+
 function SpellBlocker:__init(menu)
     self.menu = menu:sub("spellblocker", "Spell Blocker")
-    self.activeSpells = {}
     self.shouldBlock = false
-    local enemies = ObjectManager:GetEnemyHeroes()
+
+    local enemies = {}
+
+    for i, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+        enemies[enemy.charName] = true
+    end
+
+    local ordered = {}
+
     for spellName, spell in pairs(spells) do
-        for i = 1, #enemies do
-            if spell.charName == enemies[i].charName then
-                self.menu:checkbox(spellName, spellName, true)
-                self.activeSpells[spellName] = spell
-            end
+        ordered[#ordered+1] = {spellName, spell}
+    end
+
+    table.sort(ordered, function(a, b) return a[1] < b[1] end)
+
+    for i = 1, #ordered do
+        local spellName, spellData = ordered[i][1], ordered[i][2]
+
+        if enemies[spellData.charName] then
+            self.menu:checkbox(spellName, spellName, true)
+            activeSpells[spellName] = spellData
         end
     end
     AddEvent(
@@ -33,6 +50,10 @@ function SpellBlocker:__init(menu)
             self:OnTick()
         end
     )
+end
+
+function SpellBlocker:OnTick()
+
 end
 
 --[[Spell Types
@@ -60,7 +81,8 @@ end
 
 
 ]]
-local spells = {
+
+spells = {
     ["Aatrox P Deathbringer Stance"] = {
         charName = "Aatrox",
         check = {type = "autoAttack", name = "AatroxPassiveAttack"}
@@ -199,13 +221,10 @@ local spells = {
     },
     --Ivern
     ["Janna W Zephyr"] = {
-            charName = "Janna",
+        charName = "Janna",
         check = {type = "missile", name = "SowTheWind"}
     },
 }
-
-local function OnTick()
-end
 
 local function HasBuff(unit, buffName, isEnd)
     local buffs = enemy.buffManager.buffs
