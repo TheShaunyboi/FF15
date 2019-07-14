@@ -1,5 +1,5 @@
 local Kaisa = {}
-local version = 1.3
+local version = 1.4
 if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
     DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
@@ -7,7 +7,6 @@ end
 require "FF15Menu"
 require "utils"
 local Orbwalker = require "FF15OL"
-
 
 function OnLoad()
     if not _G.Prediction then
@@ -27,7 +26,12 @@ function Kaisa:__init()
         speed = 1750,
         range = 2500,
         delay = 0.4,
-        width = 200
+        width = 200,
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
     }
     self:Menu()
     AddEvent(
@@ -102,10 +106,10 @@ end
 
 function Kaisa:CastQ()
     if myHero.spellbook:CanUseSpell(0) == 0 then
-        local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 1000)
+        local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
         for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
             if _G.Prediction.IsValidTarget(enemy, 1000) then
-                local enemyPred = _G.Prediction.GetUnitPosition(enemy, NetClient.ping / 1000)
+                local enemyPred = _G.Prediction.GetUnitPosition(enemy, NetClient.ping / 2000 + 0.06)
                 if GetDistanceSqr(myHeroPred, enemyPred) < self.qRange * self.qRange then
                     myHero.spellbook:CastSpell(0, pwHud.hudManager.activeVirtualCursorPos)
                 end
@@ -118,9 +122,9 @@ function Kaisa:W()
     local target1 = Orbwalker:GetTarget(self.w.searchRange, "AP", pwHud.hudManager.virtualCursorPos)
     local target2 = Orbwalker:GetTarget(myHero.characterIntermediate.attackRange, "AP", myHero)
     if target1 then
-        self:CastW(target1, true)
+        self:CastW(target1)
     elseif target2 then
-        self:CastW(target2, false)
+        self:CastW(target2)
     else
         --on CC
         for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
@@ -128,22 +132,16 @@ function Kaisa:W()
                 _G.Prediction.IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
                     _G.Prediction.IsImmobile(enemy, GetDistance(enemy) / self.w.speed + self.w.delay)
              then
-                self:CastW(enemy, true)
+                self:CastW(enemy)
             end
         end
     end
 end
 
-function Kaisa:CastW(target, slow)
+function Kaisa:CastW(target)
     if myHero.spellbook:CanUseSpell(1) == 0 and GetDistance(target.position) <= self.w.range then
         local pred = _G.Prediction.GetPrediction(target, self.w, myHero)
-        if
-            pred and pred.castPosition and
-                ((pred.realHitChance == 1 or _G.Prediction.WaypointManager.ShouldCast(target)) or not slow) and
-                not pred:windWallCollision() and
-                not pred:minionCollision() and
-                GetDistanceSqr(pred.castPosition) <= self.w.range * self.w.range
-         then
+        if pred and pred.castPosition and (pred.rates["very slow"] or GetDistanceSqr(pred.castPosition) < 500 * 500) then
             myHero.spellbook:CastSpell(1, pred.castPosition)
         end
     end

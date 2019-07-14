@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 2
+local version = 2.1
 if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
@@ -40,7 +40,6 @@ function Ezreal:__init()
         range = 1150,
         delay = 0.25,
         width = 165,
-        castRate = "very slow",
         collision = {
             ["Wall"] = true,
             ["Hero"] = true,
@@ -53,7 +52,11 @@ function Ezreal:__init()
         range = 2500,
         delay = 1,
         width = 325,
-        castRate = "very slow"
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = false
+        }
     }
     self.wBuffTarget = nil
     self:Menu()
@@ -153,11 +156,33 @@ function Ezreal:OnDraw()
     end
 end
 
+function Ezreal:CastQ()
+    if myHero.spellbook:CanUseSpell(0) == 0 then
+        local qTargets, qPred =
+            self:GetTarget(
+            self.q,
+            true,
+            nil,
+            function(unit, pred)
+                return pred.rates["very slow"] or
+                    GetDistanceSqr(pred.castPosition) <
+                        myHero.characterIntermediate.attackRange * myHero.characterIntermediate.attackRange
+            end
+        )
+        if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
+            myHero.spellbook:CastSpell(0, qPred[self.wBuffTarget.networkId].castPosition)
+        end
+        for _, pred in pairs(qPred) do
+            myHero.spellbook:CastSpell(0, pred.castPosition)
+        end
+    end
+end
+
 function Ezreal:OnTick()
     if not Orbwalker:IsAttacking() then
         if self.menu.r:get() and myHero.spellbook:CanUseSpell(3) == 0 then
             local rTarget, rPred = self:GetTarget(self.r)
-            if rTarget and rPred then
+            if rTarget and rPred and rPred.rates["very slow"] then
                 myHero.spellbook:CastSpell(3, rPred.castPosition)
             end
         end
@@ -172,55 +197,19 @@ function Ezreal:OnTick()
                         return pred:heroCollision(2)
                     end
                 )
-                if rTarget and rPred then
+                if rTarget and rPred and rPred.rates["very slow"] then
                     myHero.spellbook:CastSpell(3, rPred.castPosition)
                 end
             end
             if myHero.spellbook:CanUseSpell(1) == 0 then
                 local wTarget, wPred = self:GetTarget(self.w)
-                if wTarget and wPred then
+                if wTarget and wPred and wPred.rates["very slow"] then
                     myHero.spellbook:CastSpell(1, wPred.castPosition)
                 end
             end
-            if myHero.spellbook:CanUseSpell(0) == 0 then
-                local qTargets, qPred =
-                    self:GetTarget(
-                    self.q,
-                    true,
-                    nil,
-                    function(unit, pred)
-                        return pred.rates["very slow"] or
-                            GetDistanceSqr(pred.castPosition) <
-                                myHero.characterIntermediate.attackRange * myHero.characterIntermediate.attackRange
-                    end
-                )
-                if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
-                    myHero.spellbook:CastSpell(0, qPred[self.wBuffTarget.networkId].castPosition)
-                end
-                for _, pred in pairs(qPred) do
-                    myHero.spellbook:CastSpell(0, pred.castPosition)
-                end
-            end
+            self:CastQ()
         elseif self.menu.q:get() and not _G.Prediction.IsRecalling(myHero) then
-            if myHero.spellbook:CanUseSpell(0) == 0 then
-                local qTargets, qPred =
-                    self:GetTarget(
-                    self.q,
-                    true,
-                    nil,
-                    function(unit, pred)
-                        return pred.rates["very slow"] or
-                            GetDistanceSqr(pred.castPosition) <
-                                myHero.characterIntermediate.attackRange * myHero.characterIntermediate.attackRange
-                    end
-                )
-                if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
-                    myHero.spellbook:CastSpell(0, qPred[self.wBuffTarget.networkId].castPosition)
-                end
-                for _, pred in pairs(qPred) do
-                    myHero.spellbook:CastSpell(0, pred.castPosition)
-                end
-            end
+            self:CastQ()
         end
     end
 end
