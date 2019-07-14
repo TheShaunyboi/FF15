@@ -1,5 +1,5 @@
 local Kaisa = {}
-local version = 1.4
+local version = 1.5
 if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
     DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
@@ -33,6 +33,10 @@ function Kaisa:__init()
             ["Minion"] = true
         }
     }
+    self.turrets = {}
+    for i, turret in pairs(ObjectManager:GetEnemyTurrets()) do
+        self.turrets[turret.networkId] = {object = turret, range = 775 + 25}
+    end
     self:Menu()
     AddEvent(
         Events.OnTick,
@@ -57,6 +61,12 @@ function Kaisa:__init()
         Events.OnDraw,
         function()
             self:OnDraw()
+        end
+    )
+    AddEvent(
+        Events.OnDeleteObject,
+        function(obj)
+            self:OnDeleteObject(obj)
         end
     )
     PrintChat("Kaisa loaded")
@@ -106,6 +116,15 @@ end
 
 function Kaisa:CastQ()
     if myHero.spellbook:CanUseSpell(0) == 0 then
+        for i, turret in pairs(self.turrets) do
+            local turretObj = turret.object
+            if
+                turretObj and turretObj.isValid and turretObj.health > 0 and
+                    GetDistanceSqr(turretObj) <= turret.range * turret.range
+             then
+                return
+            end
+        end
         local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
         for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
             if _G.Prediction.IsValidTarget(enemy, 1000) then
@@ -168,6 +187,12 @@ end
 function Kaisa:OnBuffLost(obj, buff)
     if obj == myHero and buff.name == "KaisaE" then
         Orbwalker:BlockAttack(false)
+    end
+end
+
+function Kaisa:OnDeleteObject(obj)
+    if self.turrets[obj.networkId] then
+        self.turrets[obj.networkId] = nil
     end
 end
 
