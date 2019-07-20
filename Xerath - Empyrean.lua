@@ -6,10 +6,10 @@ local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
 local version = 3
-if tonumber(GetInternalWebResult("Xerath - Empyrean.version")) > version then
+--[[ if tonumber(GetInternalWebResult("Xerath - Empyrean.version")) > version then
     DownloadInternalFile("Xerath - Empyrean.lua", SCRIPT_PATH .. "Xerath - Empyrean.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("Xerath - Empyrean.version")) .. " Press F5")
-end
+end ]]
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
@@ -141,11 +141,6 @@ function Xerath:Menu()
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Tap Key", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
-    self.menu.xerathDraw:sub("q", "Q")
-    self.menu.xerathDraw.q:checkbox("q", "Q", true)
-    self.menu.xerathDraw:sub("r", "R")
-    self.menu.xerathDraw.r:checkbox("r", "R", true)
-    self.menu.xerathDraw.r:checkbox("rmini", "R Minimap", true)
 end
 
 function Xerath:DrawMinimapCircle(pos3d, radius, color)
@@ -180,26 +175,20 @@ function Xerath:GetCastRate(spell)
 end
 
 function Xerath:OnDraw()
-    if self.menu.xerathDraw.q.q:get() then
-        local isQActive, remainingTime = self:IsQActive()
-        local range = self.q.max
+    local isQActive, remainingTime = self:IsQActive()
+    local range = self.q.max
 
-        if isQActive then
-            range = self:GetQRange(remainingTime)
-        end
-
-        DrawHandler:Circle3D(myHero.position, range, Color.White)
+    if isQActive then
+        range = self:GetQRange(remainingTime)
     end
+
+    DrawHandler:Circle3D(myHero.position, range, Color.White)
 
     if myHero.spellbook:Spell(SpellSlot.R).level > 0 then
         self.r.range = self:GetRRange()
-        if self.menu.xerathDraw.r.r:get() then
-            DrawHandler:Circle3D(myHero.position, self.r.range, Color.White)
-        end
-        if self.menu.xerathDraw.r.rmini:get() then
-            local radius = TacticalMap.width * self.r.range / 14692
-            self:DrawMinimapCircle(myHero, self.r.range, Color.White)
-        end
+        DrawHandler:Circle3D(myHero.position, self.r.range, Color.White)
+        local radius = TacticalMap.width * self.r.range / 14692
+        self:DrawMinimapCircle(myHero, self.r.range, Color.White)
     end
     if self:IsRActive() then
         DrawHandler:Circle3D(pwHud.hudManager.virtualCursorPos, self.menu.rr:get(), Color.White)
