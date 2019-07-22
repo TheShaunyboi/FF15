@@ -186,14 +186,14 @@ function Syndra:OnTick()
     for orb in pairs(self.spell.e.blacklist) do
         if self.spell.e.blacklist[orb].time <= os.clock() then
             if self.wThrowData and GetDistanceSqr(self.spell.e.blacklist[orb].pos, orb.position) == 0 then
-                print(
+              --[[   print(
                     "Time",
                     os.clock() - self.wThrowData.time,
                     "ObjDist",
                     GetDistance(orb.position, self.wThrowData.objPos),
                     "PlayerDist",
                     GetDistance(orb.position, self.wThrowData.startPos)
-                )
+                ) ]]
                 self.wThrowData = nil
             end
             if
@@ -333,7 +333,7 @@ function Syndra:OnTick()
                 if
                     ((Orbwalker:GetMode() == "Combo" and
                         (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
-                            GetDistance(qTarget) >= self.spell.e.range - 50)) or
+                            GetDistance(qTarget) >= self.spell.e.range + 100)) or
                         Orbwalker:GetMode() == "Harass") and
                         self:CastQ(qPred)
                  then
@@ -531,8 +531,10 @@ function Syndra:CalcQEShort(target, widthMax)
         last = self.spell.e.width
         self.spell.e.width =
             -target.boundingRadius +
-            GetDistance(pred.castPosition) / GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
-                (widthMax + target.boundingRadius)
+            (GetDistance(pred.castPosition) - target.boundingRadius) /
+                GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
+                (widthMax + target.boundingRadius) -
+            10
     end
     return pred
 end
@@ -706,7 +708,6 @@ function Syndra:RExecutes(target)
         50 + 20 * myHero.experience.level) or
         nil
     local diff = target.health - base
-    print(diff)
     if diff <= 0 then
         return true, false
     elseif ignite and diff <= ignite then
