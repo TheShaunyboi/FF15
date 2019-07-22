@@ -6,9 +6,9 @@ local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
 local version = 3
-if tonumber(GetInternalWebResult("Xerath - Empyrean.version")) > version then
-    DownloadInternalFile("Xerath - Empyrean.lua", SCRIPT_PATH .. "Xerath - Empyrean.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("Xerath - Empyrean.version")) .. " Press F5")
+if tonumber(GetInternalWebResult("XerathEmpyrean.version")) > version then
+    DownloadInternalFile("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua")
+    PrintChat("New version:" .. tonumber(GetInternalWebResult("XerathEmpyrean.version")) .. " Press F5")
 end 
 require("FF15Menu")
 require("utils")

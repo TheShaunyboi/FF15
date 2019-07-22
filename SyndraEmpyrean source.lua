@@ -1,8 +1,8 @@
 local Syndra = {}
 local version = 2
-if tonumber(GetInternalWebResult("Syndra - Empyrean.version")) > version then
-    DownloadInternalFile("Syndra - Empyrean.lua", SCRIPT_PATH .. "Syndra - Empyrean.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("Syndra - Empyrean.version")) .. " Press F5")
+if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
+    DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
+    PrintChat("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
 end
 require "FF15Menu"
 require "utils"
