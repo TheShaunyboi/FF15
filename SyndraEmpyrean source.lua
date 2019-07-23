@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 2.3
+local version = 2.31
 if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
     DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
@@ -144,7 +144,7 @@ function Syndra:init()
 end
 
 function Syndra:Menu()
-    self.menu = Menu("asdfsyndra", "Syndra")
+    self.menu = Menu("SyndraEmpyrean", "Syndra - Empyrean")
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("qe2", "Use QE Long", true, string.byte("Z"))
     self.menu:checkbox("e", "AutoE", true, string.byte("T"))
@@ -320,9 +320,9 @@ function Syndra:OnTick()
             end
         end
         self.spell.qe.delay = 0.25 + NetClient.ping / 1000
-        local qeTarget, qePred =
+       local qeTarget, qePred =
             self:GetTarget(
-            self.spell.qe.range,
+            self.spell.qe,
             false,
             function(unit)
                 self:CalcQELong(unit, self.spell.q.range - 50)
@@ -336,7 +336,7 @@ function Syndra:OnTick()
                 self:CastQELong(qePred)
          then
             return
-        end
+        end 
         if myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready and not Orbwalker:IsAttacking() then
             local qTarget, qPred = self:GetTarget(self.spell.q)
             if qTarget and qPred then
