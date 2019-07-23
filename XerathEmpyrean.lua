@@ -5,11 +5,11 @@ end
 local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
-local version = 3
+local version = 3.1
 if tonumber(GetInternalWebResult("XerathEmpyrean.version")) > version then
     DownloadInternalFile("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("XerathEmpyrean.version")) .. " Press F5")
-end 
+end
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
@@ -89,6 +89,12 @@ function Xerath:__init()
         R = nil
     }
 
+    self.rotateValues = {}
+    local dir = Vector(myHero.position):normalized()
+    for angle = 0, 360, 15 do
+        self.rotateValues[angle / 15] = dir:RotatedAngle(angle)
+    end
+
     self:Menu()
     self.TS =
         DreamTS(
@@ -120,7 +126,7 @@ function Xerath:__init()
 end
 
 function Xerath:Menu()
-    self.menu = Menu("asdfxerath", "Xerath")
+    self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean")
 
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("antigap", "Anti Gapclose")
@@ -148,8 +154,8 @@ function Xerath:DrawMinimapCircle(pos3d, radius, color)
     local pts = {}
     local dir = pos3d:normalized()
 
-    for angle = 0, 360, 15 do
-        local pos = TacticalMap:WorldToMinimap((pos3d + dir:RotatedAngle(angle) * radius):toDX3())
+    for angle, val in ipairs(self.rotateValues) do
+        local pos = TacticalMap:WorldToMinimap((pos3d + val * radius):toDX3())
         if pos.x ~= 0 then
             pts[#pts + 1] = pos
         end
@@ -216,7 +222,7 @@ end
 function Xerath:CastQ2(pred, range)
     local dist = GetDistanceSqr(pred.castPosition)
     local rangeAdjust = range - 100
-    if pred.rates[self:GetCastRate("q")] or (dist > 100 * 100 and dist < 400 * 400) then
+    if pred.rates[self:GetCastRate("q")] then
         if pred.isMoving and not pred.targetDashing then
             if dist > rangeAdjust * rangeAdjust then
                 return
