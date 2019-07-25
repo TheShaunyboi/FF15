@@ -49,18 +49,18 @@ function Xerath:__init()
         delay = 0.83,
         radius = 270,
         speed = math.huge,
-        collision = {
-            ["Wall"] = true,
-            ["Hero"] = true,
-            ["Minion"] = true
-        }
     }
     self.e = {
         type = "linear",
         range = 1000,
         delay = 0.25,
         width = 125,
-        speed = 1400
+        speed = 1400,
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
     }
     self.r = {
         type = "circular",
