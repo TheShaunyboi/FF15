@@ -5,11 +5,13 @@ end
 local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
-local version = 3.1
+local version = 3.2
+--[[
 if tonumber(GetInternalWebResult("XerathEmpyrean.version")) > version then
     DownloadInternalFile("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("XerathEmpyrean.version")) .. " Press F5")
 end
+]]
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
@@ -20,9 +22,11 @@ function OnLoad()
     if not _G.Prediction then
         _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
     end
+    --[[
     if not _G.AuroraOrb and not _G.LegitOrbwalker then
         LoadPaidScript(PaidScript.AURORA_BUNDLE)
     end
+    ]]
     Orbwalker:Setup()
     Xerath:__init()
 end
@@ -51,24 +55,7 @@ function Xerath:__init()
         range = 1000,
         delay = 0.25,
         width = 125,
-        speed = 1400,
-        collision = {
-            ["Wall"] = true,
-            ["Hero"] = true,
-            ["Minion"] = true
-        }
-    }
-    self.e = {
-        type = "linear",
-        range = 1000,
-        delay = 0.25,
-        width = 125,
-        speed = 1400,
-        collision = {
-            ["Wall"] = true,
-            ["Hero"] = true,
-            ["Minion"] = true
-        }
+        speed = 1400
     }
     self.r = {
         type = "circular",
@@ -89,11 +76,18 @@ function Xerath:__init()
         R = nil
     }
 
-    self.rotateValues = {}
-    local dir = Vector(myHero.position):normalized()
-    for angle = 0, 360, 15 do
-        self.rotateValues[angle / 15] = dir:RotatedAngle(angle)
-    end
+    self.QTracker = 
+    {
+        Active = false,
+        StartT = 0,
+        EndT = 0
+    }
+    self.RTracker =
+    {
+        Active = false,
+        StartT = 0,
+        EndT = 0
+    }
 
     self:Menu()
     self.TS =
@@ -117,16 +111,24 @@ function Xerath:__init()
     )
     AddEvent(
         Events.OnProcessSpell,
-        function(obj, spell)
-            self:OnProcessSpell(obj, spell)
+        function(...)
+            self:OnProcessSpell(...)
         end
+    )
+    AddEvent(
+        Events.OnBuffGain,
+        function(...) self:OnBuffGain(...) end
+    )
+    AddEvent(
+        Events.OnBuffLost,
+        function(...) self:OnBuffLost(...) end
     )
     PrintChat("Xerath loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
 function Xerath:Menu()
-    self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean")
+    self.menu = Menu("asdfxerath", "Xerath")
 
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("antigap", "Anti Gapclose")
@@ -154,8 +156,8 @@ function Xerath:DrawMinimapCircle(pos3d, radius, color)
     local pts = {}
     local dir = pos3d:normalized()
 
-    for angle, val in ipairs(self.rotateValues) do
-        local pos = TacticalMap:WorldToMinimap((pos3d + val * radius):toDX3())
+    for angle = 0, 360, 15 do
+        local pos = TacticalMap:WorldToMinimap((pos3d + dir:RotatedAngle(angle) * radius):toDX3())
         if pos.x ~= 0 then
             pts[#pts + 1] = pos
         end
@@ -210,7 +212,7 @@ function Xerath:CastQ(pred)
     local isQActive, remainingTime = self:IsQActive()
 
     if isQActive then
-        return self:CastQ2(pred, isQActive and self:GetQRange(remainingTime) or self.q.max)
+        return self:CastQ2(pred, isQActive and self:GetQRange(remainingTime) or self.q.max, remainingTime)
     elseif pred.rates["instant"] then
         myHero.spellbook:CastSpell(0, pred.castPosition)
         self.LastCasts.Q1 = RiotClock.time
@@ -219,11 +221,13 @@ function Xerath:CastQ(pred)
     end
 end
 
-function Xerath:CastQ2(pred, range)
+function Xerath:CastQ2(pred, range, remainingTime)
     local dist = GetDistanceSqr(pred.castPosition)
+    local forceCast = (remainingTime and remainingTime < .1 and pred.rates["instant"])
     local rangeAdjust = range - 100
-    if pred.rates[self:GetCastRate("q")] then
-        if pred.isMoving and not pred.targetDashing then
+
+    if pred.rates[self:GetCastRate("q")] or forceCast then
+        if forceCast or (pred.isMoving and not pred.targetDashing) then
             if dist > rangeAdjust * rangeAdjust then
                 return
             end
@@ -279,22 +283,21 @@ function Xerath:CastTrinket()
 end
 
 function Xerath:CastR()
-    self.r.range = self:GetRRange()
-    local maxRangeSqr = self.menu.rr:get() * self.menu.rr:get()
-    local mouseTarget, mousePred =
-        self:GetTarget(
-        self.r,
-        false,
-        function(unit)
-            return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit) <= maxRangeSqr
-        end
-    )
-    local allTarget, allPred = self:GetTarget(self.r)
-    if self.r.lastTarget and self.r.lastTarget.isVisible and allTarget and allPred and allTarget ~= self.r.lastTarget then
-        self.r.lastTarget = nil
-        self.r.mode = nil
-    end
     if self.menu.tap:get() and myHero.spellbook:CanUseSpell(3) == 0 then
+        self.r.range = self:GetRRange()
+        local maxRangeSqr = self.menu.rr:get() * self.menu.rr:get()
+        local mouseTarget, mousePred = self.TS:GetTarget(self.r, myHero, nil, 
+            function(unit)
+                return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit) <= maxRangeSqr
+            end
+        )
+
+        local allTarget, allPred = self.TS:GetTarget(self.r)
+        if self.r.lastTarget and self.r.lastTarget.isVisible and allTarget and allPred and allTarget ~= self.r.lastTarget then
+            self.r.lastTarget = nil
+            self.r.mode = nil
+        end
+        
         if mouseTarget and mousePred then
             if mousePred.rates[self:GetCastRate("r")] then
                 myHero.spellbook:CastSpell(3, mousePred.castPosition)
@@ -316,15 +319,30 @@ function Xerath:CastR()
     end
 end
 
+
+local UnitsInRange = {}
+-- Filter units before pred for Q, W, E
+local function InComboRange(unit)
+    return GetDistanceSqr(unit) < 2000*2000
+end
+
+local function InComboRangeCallback(unit)
+    return UnitsInRange[unit.index]
+end
+
 function Xerath:OnTick()
+    if myHero.dead then return end
+
     local qActive = self:IsQActive()
     local rActive = self:IsRActive()
 
-    if qActive or rActive then
-        Orbwalker:BlockAttack(true)
-    else
-        Orbwalker:BlockAttack(false)
+    for i, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+        UnitsInRange[enemy.index] = InComboRange(enemy)
     end
+
+    local ComboMode =   Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking()
+    local HarassMode =  Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
+
     -- Will waste pred calls without these conditions as well as call Cast when can't cast
     if not qActive and self:ShouldCast() then
         if rActive then
@@ -334,109 +352,108 @@ function Xerath:OnTick()
         else
             self.r.lastTarget = nil
             self.r.mode = nil
+
             if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
-                local gapcloser_targets, gapcloser_preds =
-                    self:GetTarget(
-                    self.e,
-                    true,
-                    nil,
-                    function(unit, pred)
-                        if not pred then
+                local e_targets, e_preds = self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
+
+                for i = 1, #e_targets do
+                    local unit = e_targets[i]
+                    local pred = e_preds[unit.networkId]
+                    if pred then
+                        if pred.targetDashing and self.antiGapHeros[unit.networkId] and
+                                self.menu.antigap[unit.charName]:get() 
+                                and not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and 
+                                self:CastE(pred)
+                         then
                             return
                         end
-
-                        if
-                            pred.targetDashing and self.antiGapHeros[unit.networkId] and
-                                self.menu.antigap[unit.charName]:get()
-                         then
-                            return true
+                        if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() 
+                            and not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision()
+                            and self:CastE(pred)
+                            then
+                            return
                         end
-                        if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() then
-                            return true
-                        end
-
-                        return false
-                    end
-                )
-
-                for i = 1, #gapcloser_targets do
-                    local pred = gapcloser_preds[gapcloser_targets[i].networkId]
-                    if pred and self:CastE(pred) then
-                        return
                     end
                 end
 
-                local e_target, e_pred = self:GetTarget(self.e)
-
-                if
-                    e_target and e_pred and Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and
-                        self:CastE(e_pred)
-                 then
-                    return
+                if ComboMode then
+                    local target = e_targets[1]
+                    if target then
+                        local pred = e_preds[target.networkId]
+                        
+                        if self:CastE(pred) then
+                            return
+                        end
+                    end
                 end
             end
 
-            if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 then
-                local w_target, w_pred = self:GetTarget(self.w)
-                if w_target and w_pred then
-                    if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() then
-                        if self:CastW(w_pred) then
-                            return
-                        end
-                    end
+            if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and ComboMode then
+                local w_target, w_pred = self.TS:GetTarget(self.w, myHero, InComboRangeCallback)
+                if w_target and w_pred and self:CastW(w_pred) then
+                    return
                 end
             end
         end
     end
 
-    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() then
+    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and (ComboMode or HarassMode) then
         self.q.range = self.q.max
 
-        local q_target, q_pred =
-            self:GetTarget(
-            self.q,
-            false,
-            nil,
-            function(unit, pred)
-                return pred.rates["instant"]
-            end
-        )
-        if q_target and q_pred then
-            if Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
-                return
-            elseif Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking() and self:CastQ(q_pred) then
-                return
-            end
+        local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
+
+        if q_target and q_pred and self:CastQ(q_pred) then
+            return
+        end
+    end
+end
+
+---@param unit GameObject
+---@param buff BuffInstance
+function Xerath:OnBuffGain(unit, buff)
+    if unit.networkId == myHero.networkId then
+        local time = RiotClock.time
+
+        if buff.type == BuffType.Aura and buff.name == "XerathArcanopulseChargeUp" then
+            Orbwalker:BlockAttack(true)
+
+            self.QTracker.StartT = time
+            self.QTracker.EndT = time + buff.remainingTime
+            self.QTracker.Active = true
+        elseif buff.type == BuffType.CombatEnchancer and buff.name == "XerathLocusOfPower2" then
+            Orbwalker:BlockAttack(true)
+            Orbwalker:BlockMove(true)
+
+            self.RTracker.StartT = time
+            self.RTracker.EndT = time + buff.remainingTime
+            self.RTracker.Active = true
+        end
+    end
+end
+
+---@param unit GameObject
+---@param buff BuffInstance
+function Xerath:OnBuffLost(unit, buff)
+    if unit.networkId == myHero.networkId then
+        if buff.name == "XerathArcanopulseChargeUp" then
+            Orbwalker:BlockAttack(false)
+
+            self.QTracker.Active = false
+        elseif buff.name == "XerathLocusOfPower2" then
+            Orbwalker:BlockAttack(false)
+            Orbwalker:BlockMove(false)
+
+            self.RTracker.Active = false
         end
     end
 end
 
 function Xerath:IsQActive()
-    local buffs = myHero.buffManager.buffs
-
-    for i = 1, #buffs do
-        local buff = buffs[i]
-
-        if buff.name == "XerathArcanopulseChargeUp" then
-            return true, buff.remainingTime
-        end
-    end
-
-    return false, 0
+    return self.QTracker.Active and RiotClock.time < self.QTracker.EndT, (self.QTracker.EndT - RiotClock.time)
 end
 
 function Xerath:IsRActive()
-    local buffs = myHero.buffManager.buffs
-
-    for i = 1, #buffs do
-        local buff = buffs[i]
-
-        if buff.name == "XerathLocusOfPower2" then
-            return true, buff.remainingTime
-        end
-    end
-
-    return false, 0
+    return self.RTracker.Active
 end
 
 function Xerath:OnProcessSpell(obj, spell)
@@ -461,16 +478,4 @@ function Xerath:GetQRange(remainingTime)
         self.q.min + (self.q.max - self.q.min) * (RiotClock.time - chargeStart - 0.2) / self.q.charge,
         self.q.max
     )
-end
-
-function Xerath:GetTarget(spell, all, targetFilter, predFilter)
-    local units, preds = self.TS:GetTargets(spell, myHero.position, targetFilter, predFilter)
-    if all then
-        return units, preds
-    else
-        local target = self.TS.target
-        if target then
-            return target, preds[target.networkId]
-        end
-    end
 end
