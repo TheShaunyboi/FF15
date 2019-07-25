@@ -48,7 +48,12 @@ function Xerath:__init()
         range = 1000,
         delay = 0.83,
         radius = 270,
-        speed = math.huge
+        speed = math.huge,
+        collision = {
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
+        }
     }
     self.e = {
         type = "linear",
@@ -361,16 +366,12 @@ function Xerath:OnTick()
                     local pred = e_preds[unit.networkId]
                     if pred then
                         if pred.targetDashing and self.antiGapHeros[unit.networkId] and
-                                self.menu.antigap[unit.charName]:get() 
-                                and not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and 
+                                self.menu.antigap[unit.charName]:get()  and 
                                 self:CastE(pred)
                          then
                             return
                         end
-                        if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() 
-                            and not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision()
-                            and self:CastE(pred)
-                            then
+                        if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() and self:CastE(pred) then
                             return
                         end
                     end
@@ -381,7 +382,7 @@ function Xerath:OnTick()
                     if target then
                         local pred = e_preds[target.networkId]
                         
-                        if self:CastE(pred) then
+                        if not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and self:CastE(pred) then
                             return
                         end
                     end
