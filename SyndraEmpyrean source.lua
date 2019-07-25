@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 2.31
+local version = 2.32
 if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
     DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
@@ -17,9 +17,9 @@ function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
-    if not _G.AuroraOrb and not _G.LegitOrbwalker then
+   --[[  if not _G.AuroraOrb and not _G.LegitOrbwalker then
         LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
-    end
+    end ]]
     Orbwalker:Setup()
 end
 
@@ -34,7 +34,7 @@ function Syndra:init()
         },
         w = {
             type = "circular",
-            range = 950,
+            range = 925,
             delay = 0.63,
             radius = 220,
             speed = math.huge,
@@ -57,7 +57,7 @@ function Syndra:init()
             castRate = "very slow",
             collision = {
                 ["Wall"] = true,
-                ["Hero"] = true,
+                ["Hero"] = false,
                 ["Minion"] = false
             }
         },
@@ -70,7 +70,7 @@ function Syndra:init()
             width = 200,
             collision = {
                 ["Wall"] = true,
-                ["Hero"] = true,
+                ["Hero"] = false,
                 ["Minion"] = false
             }
         }
@@ -295,37 +295,37 @@ function Syndra:OnTick()
             myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and Orbwalker:GetMode() == "Combo" and
                 not Orbwalker:IsAttacking()
          then
+            local wTarget, wPred = self:GetTarget(self.spell.w)
             local _, isOrb = self:GetGrabTarget()
-            if
-                myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and not self.spell.w.heldInfo and
-                    (not myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready or
-                        (isOrb or not myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready) or
-                        not self:WaitToInitialize())
-             then
-                local wTarget = self:GetTargetRange(self.spell.w.range)
-                if wTarget and self:CastW1() then
+            if wTarget and wPred then
+                if
+                    myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and not self.spell.w.heldInfo and
+                        (not myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready or
+                            (isOrb or not myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready) or
+                            not self:WaitToInitialize()) and
+                        self:CastW1()
+                 then
+                    --PrintChat("W1")
                     return
                 end
-            end
-            if self.spell.w.heldInfo then
-                local w2Target, w2Pred = self:GetTarget(self.spell.w)
                 if
-                    w2Target and w2Pred and
+                    self.spell.w.heldInfo and
                         (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
-                            GetDistance(w2Pred.castPosition) >= self.spell.e.range - 50) and
-                        self:CastW2(w2Pred)
+                            GetDistance(wPred.castPosition) >= self.spell.e.range - 50) and
+                        self:CastW2(wPred)
                  then
+                    --PrintChat("W2")
                     return
                 end
             end
         end
         self.spell.qe.delay = 0.25 + NetClient.ping / 1000
-       local qeTarget, qePred =
+        local qeTarget, qePred =
             self:GetTarget(
             self.spell.qe,
             false,
             function(unit)
-                self:CalcQELong(unit, self.spell.q.range - 50)
+                self:CalcQELong(unit, self.spell.q.range - 100)
                 return unit
             end
         )
@@ -336,7 +336,7 @@ function Syndra:OnTick()
                 self:CastQELong(qePred)
          then
             return
-        end 
+        end
         if myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready and not Orbwalker:IsAttacking() then
             local qTarget, qPred = self:GetTarget(self.spell.q)
             if qTarget and qPred then
@@ -476,7 +476,7 @@ function Syndra:GetGrabTarget()
     local lowHealth = math.huge
     local lowMinion = nil
     for _, minion in ipairs(minionsInRange) do
-        if minion and GetDistance(minion.position) <= self.spell.w.range then
+        if minion and _G.Prediction.IsValidTarget(minion) and GetDistance(minion.position) <= self.spell.w.range then
             if minion.health < lowHealth then
                 lowHealth = minion.health
                 lowMinion = minion
@@ -672,7 +672,7 @@ function Syndra:CastQELong(pred)
             pred.rates["slow"]
      then
         local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
-        local qPos = Vector(myHeroPred):extended(Vector(pred.castPosition), (self.spell.q.range - 50)):toDX3()
+        local qPos = Vector(myHeroPred):extended(Vector(pred.castPosition), (self.spell.q.range - 100)):toDX3()
         myHero.spellbook:CastSpell(SpellSlot.Q, qPos)
         self.last.q = os.clock()
         pred:draw()
@@ -799,7 +799,7 @@ function Syndra:RConditions(target)
 
     enemiesInRange1, enemiesInRange2, alliesInRange = 0, 0, 0
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
-        if GetDistance(enemy.position) <= 550 then
+        if GetDistance(enemy.position) <= 800 then
             enemiesInRange1 = enemiesInRange1 + 1
         end
         if GetDistance(enemy.position) <= 2500 then
@@ -808,7 +808,7 @@ function Syndra:RConditions(target)
     end
 
     for _, ally in pairs(ObjectManager:GetAllyHeroes()) do
-        if GetDistance(ally.position) <= 550 then
+        if GetDistance(ally.position) <= 800 then
             alliesInRange = alliesInRange + 1
         end
     end
@@ -973,7 +973,7 @@ function Syndra:OnProcessSpell(obj, spell)
                 self.spell.e.queue = nil
             end
         elseif spell.spellData.name == "SyndraW" then
-            self.last.w = nil
+            --self.last.w = nil
         elseif spell.spellData.name == "SyndraWCast" then
             self.last.w = nil
             if
