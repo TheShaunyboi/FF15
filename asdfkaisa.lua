@@ -13,7 +13,7 @@ function OnLoad()
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
     if not _G.AuroraOrb and not _G.LegitOrbwalker then
-        LoadPaidScript(PaidScript.AURORA_BUNDLE)
+        LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
     end
 
     Orbwalker:Setup()

@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 2.51
+local version = 2.6
 if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
     DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
     print("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
@@ -116,7 +116,50 @@ function Syndra:init()
         myHero.spellbook:Spell(SpellSlot.Summoner1).name == "SummonerDot" and SpellSlot.Summoner1 or
         myHero.spellbook:Spell(SpellSlot.Summoner2).name == "SummonerDot" and SpellSlot.Summoner2 or
         nil
-
+    self.wGrabList = {
+        ["SRU_ChaosMinionSuper"] = true,
+        ["SRU_OrderMinionSuper"] = true,
+        ["HA_ChaosMinionSuper"] = true,
+        ["HA_OrderMinionSuper"] = true,
+        ["SRU_ChaosMinionRanged"] = true,
+        ["SRU_OrderMinionRanged"] = true,
+        ["HA_ChaosMinionRanged"] = true,
+        ["HA_OrderMinionRanged"] = true,
+        ["SRU_ChaosMinionMelee"] = true,
+        ["SRU_OrderMinionMelee"] = true,
+        ["HA_ChaosMinionMelee"] = true,
+        ["HA_OrderMinionMelee"] = true,
+        ["SRU_ChaosMinionSiege"] = true,
+        ["SRU_OrderMinionSiege"] = true,
+        ["HA_ChaosMinionSiege"] = true,
+        ["HA_OrderMinionSiege"] = true,
+        ["SRU_Krug"] = true,
+        ["SRU_KrugMini"] = true,
+        --["TestCubeRender"] = true,
+        ["SRU_RazorbeakMini"] = true,
+        ["SRU_Razorbeak"] = true,
+        ["SRU_MurkwolfMini"] = true,
+        ["SRU_Murkwolf"] = true,
+        ["SRU_Gromp"] = true,
+        ["Sru_Crab"] = true,
+        ["SRU_Red"] = true,
+        ["SRU_Blue"] = true,
+        ["EliseSpiderling"] = true,
+        --["GangplankBarrel"] = true,
+        ["HeimerTYellow"] = true,
+        ["HeimerTBlue"] = true,
+        --["IllaoiMinion"] = true,
+        --["KalistaSpawn"] = true,
+        ["MalzaharVoidling"] = true,
+        ["ShacoBox"] = true,
+        --["TeemoMushroom"] = true,
+        ["YorickGhoulMelee"] = true,
+        ["YorickBigGhoul"] = true
+        --["ZyraThornPlant"] = true,
+        --["ZyraGraspingPlant"] = true,
+        --["VoidGate"] = true,
+        --["VoidSpawn"] = true
+    }
     self.orbs = {}
     self.rDamages = {}
     self.electrocuteTracker = {}
@@ -183,14 +226,14 @@ function Syndra:Menu()
 
     self.menu:sub("antigap", "Anti Gapclose")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
-        self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
+        self.menu.antigap:checkbox(tostring(enemy.networkId), enemy.charName, true)
         self.antiGapHeros[enemy.networkId] = true
     end
     --[[   self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt) ]]
     self.menu:sub("r", "R")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
-        self.menu.r:checkbox(enemy.charName, enemy.charName, true)
+        self.menu.r:checkbox(tostring(enemy.networkId), enemy.charName, true)
     end
     self.menu.r:checkbox("c0", "Cast regardless of below conditions", false)
     self.menu.r:checkbox("c1", "Cast if target in wall", true)
@@ -506,8 +549,10 @@ function Syndra:GetGrabTarget()
     local lowHealth = math.huge
     local lowMinion = nil
     for _, minion in ipairs(minionsInRange) do
+        print(minion.name)
+
         if
-            minion and _G.Prediction.IsValidTarget(minion) and
+            minion and self.wGrabList[minion.charName] and _G.Prediction.IsValidTarget(minion) and
                 GetDistanceSqr(minion.position) <= self.spell.w.range * self.spell.w.range
          then
             if minion.health < lowHealth then
@@ -564,7 +609,8 @@ function Syndra:CastShortEMode(mode)
                 return
             end
             return Orbwalker:GetMode() == "Combo" or
-                pred.targetDashing and self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get()
+                pred.targetDashing and self.antiGapHeros[unit.networkId] and
+                    self.menu.antigap[tostring(unit.networkId)]:get()
         end
     )
     if eTarget and ePred then
@@ -581,7 +627,7 @@ end
 
 function Syndra:CanEQ(qPos, pred, target)
     --wall check
-    local interval = 100
+    local interval = 50
     local castPosition = self:GetCastPosition(pred)
     local count = math.floor(GetDistance(castPosition, qPos:toDX3()) / interval)
     local diff = (Vector(qpos) - Vector(myHero.position)):normalized()
@@ -605,7 +651,7 @@ function Syndra:CheckForSame(list)
         for i = #list - 1, 1, -1 do
             if math.abs(last - list[i]) < 0.01 then
                 local maxInd = 0
-                local maxVal = 0
+                local maxVal = -math.huge
                 for j = i + 1, #list do
                     if list[j] > maxVal then
                         maxInd = j
@@ -640,6 +686,7 @@ function Syndra:CalcQELong(target, dist)
         end
     end
     self.spell.qe.speed = check
+    print(self.spell.qe.speed)
     return true
 end
 
@@ -662,7 +709,6 @@ function Syndra:CalcQEShort(target, widthMax, spell)
         check = self:CheckForSame(lasts)
     end
     self.spell.e.width = check
-    print(self.spell.e.width)
     return pred
 end
 
@@ -864,8 +910,8 @@ function Syndra:RConditions(target)
     local rDist = 675 + (myHero.spellbook:Spell(SpellSlot.R).level / 3) * 75
     if
         not (Orbwalker:GetMode() == "Combo" and myHero.spellbook:CanUseSpell(SpellSlot.R) == SpellState.Ready and
-            self.menu.r[target.charName] and
-            self.menu.r[target.charName]:get() and
+            self.menu.r[tostring(target.networkId)] and
+            self.menu.r[tostring(target.networkId)]:get() and
             GetDistanceSqr(target.position) <= rDist * rDist)
      then
         return false
