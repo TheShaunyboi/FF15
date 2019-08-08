@@ -1,8 +1,8 @@
 local Syndra = {}
-local version = 2.32
+local version = 2.5
 if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
     DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
+    print("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
 end
 require "FF15Menu"
 require "utils"
@@ -13,17 +13,49 @@ local dmgLib = require("FF15DamageLib")
 local DreamTS = require("DreamTS")
 local Orbwalker = require("FF15OL")
 
+local function EdgePosition2(tP, cP, source, adjustment, target, range)
+    tP = Vector(tP)
+    cP = Vector(cP)
+    adjustment = adjustment - 10
+    local dist = source:dist(tP)
+    local angle = math.asin(adjustment / dist)
+    local diff = tP - source
+    local rotated1 = diff:rotated(0, angle, 0):normalized()
+    local rotated2 = diff:rotated(0, -angle, 0):normalized()
+    local distToCast = math.sqrt(dist * dist - adjustment * adjustment)
+    local castPos1 = (source + rotated1 * distToCast):D3D()
+    local castPos2 = (source + rotated2 * distToCast):D3D()
+    local res = GetDistanceSqr(castPos1, tP:D3D()) < GetDistanceSqr(castPos2, tP:D3D()) and castPos1 or castPos2
+    local maxPos = source + (Vector(res) - source):normalized() * (range + 100)
+    local seg1 = LineSegment(source, maxPos)
+    local seg2 = LineSegment(Vector(target.position), tP)
+    local isIntersect, intersection = seg1:intersects(seg2)
+    if isIntersect and intersection then
+        local intersectionVector = Vector(intersection.x, myHero.position.y, intersection.z)
+        local intersectionAngle = intersectionVector:angleBetween(source, tP)
+        if intersectionAngle > 45 and intersectionAngle < 135 then
+            return res, true
+        else
+            return cP:D3D(), false
+        end
+    else
+        return cP:D3D(), false
+    end
+end
+
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
+        _G.EdgePosition = EdgePosition2
     end
-   --[[  if not _G.AuroraOrb and not _G.LegitOrbwalker then
+    if not _G.AuroraOrb and not _G.LegitOrbwalker then
         LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
-    end ]]
+    end
     Orbwalker:Setup()
 end
 
 function Syndra:init()
+    self.unitsInRange = {}
     self.spell = {
         q = {
             type = "circular",
@@ -35,7 +67,7 @@ function Syndra:init()
         w = {
             type = "circular",
             range = 925,
-            delay = 0.63,
+            delay = 0.7,
             radius = 220,
             speed = math.huge,
             heldInfo = nil,
@@ -54,7 +86,7 @@ function Syndra:init()
             queue = nil,
             blacklist = {},
             next = nil,
-            castRate = "very slow",
+            castRate = "slow",
             collision = {
                 ["Wall"] = true,
                 ["Hero"] = false,
@@ -139,7 +171,7 @@ function Syndra:init()
         end
     )
 
-    PrintChat("Syndra loaded")
+    print("Syndra loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
@@ -148,9 +180,12 @@ function Syndra:Menu()
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("qe2", "Use QE Long", true, string.byte("Z"))
     self.menu:checkbox("e", "AutoE", true, string.byte("T"))
+    self.antiGapHeros = {}
+
     self.menu:sub("antigap", "Anti Gapclose")
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
         self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
+        self.antiGapHeros[enemy.networkId] = true
     end
     --[[   self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt) ]]
@@ -167,6 +202,14 @@ function Syndra:Menu()
     self.menu.r:slider("c6", "Cast if mana less than", 100, 500, 200)
     self.menu.r:slider("c7", "Cast if target MR less than", 0, 200, 50)
     self.menu.r:slider("c8", "Cast if enemies around player <= x", 1, 5, 2)
+end
+
+function Syndra:GetCastPosition(pred)
+    if pred.isAdjusted then
+        return pred.ap, true
+    else
+        return pred.castPosition, false
+    end
 end
 
 function Syndra:OnTick()
@@ -212,45 +255,30 @@ function Syndra:OnTick()
             table.remove(self.orbs, i)
         end
     end
-
     if self.spell.e.queue then
         if os.clock() >= self.spell.e.queue.time then
             self.spell.e.queue = nil
         end
     end
     if self:ShouldCast() then
-        if self:AutoGrab() then
+        for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+            self.unitsInRange[enemy.networkId] = GetDistanceSqr(enemy) < 2000 * 2000
+        end
+        local q = myHero.spellbook:CanUseSpell(0) == 0
+        local notQ = myHero.spellbook:CanUseSpell(0) ~= 0
+        local w = myHero.spellbook:CanUseSpell(1) == 0
+        local w1 = w and myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and not self.spell.w.heldInfo
+        local e = myHero.spellbook:CanUseSpell(2) == 0
+        local notE = myHero.spellbook:CanUseSpell(2) ~= 0
+
+        if w1 and self:AutoGrab() then
             return
         end
-        if myHero.spellbook:CanUseSpell(2) == 0 then
-            self.spell.e.delay = 0.25 + NetClient.ping / 1000
-            local eTarget, ePred =
-                self:GetTarget(
-                self.spell.e,
-                false,
-                function(unit)
-                    self:CalcQEShort(unit, self.spell.e.widthMax)
-                    return unit
-                end,
-                function(unit, pred)
-                    if not pred then
-                        return
-                    end
-                    return Orbwalker:GetMode() == "Combo" or
-                        (pred.targetDashing and self.menu.antigap[unit.charName] and
-                            self.menu.antigap[unit.charName]:get()) --[[ or
-                        (pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() ]]
-                end
-            )
-            if
-                eTarget and ePred and ePred.castPosition and
-                    self:CanEQ(self:GetQPos(ePred.castPosition, 200), ePred, eTarget)
-             then
-                if self:CastQEShort(ePred) then
-                    return
-                elseif self:CastWE(ePred) then
-                    return
-                end
+
+        if e then
+            self.spell.e.delay = 0.35 + NetClient.ping / 1000
+            if self:CastShortEMode("q") or self:CastShortEMode("w") then
+                return
             end
             local eTargets = self:GetTargetRange(self.spell.qe.range, true)
             local canHitOrbs = {}
@@ -269,6 +297,7 @@ function Syndra:OnTick()
                     end
                 end
             end
+
             for _, target in pairs(eTargets) do
                 if (self.menu.e:get() and not _G.Prediction.IsRecalling(myHero)) or Orbwalker:GetMode() == "Combo" then
                     if self:CastE(target, canHitOrbs) then
@@ -277,6 +306,7 @@ function Syndra:OnTick()
                 end
             end
         end
+
         local igniteTargets = self:GetTargetRange(650, true)
         for _, target in pairs(igniteTargets) do
             if self:UseIgnite(target) then
@@ -291,59 +321,63 @@ function Syndra:OnTick()
                 return
             end
         end
-        if
-            myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and Orbwalker:GetMode() == "Combo" and
-                not Orbwalker:IsAttacking()
-         then
-            local wTarget, wPred = self:GetTarget(self.spell.w)
-            local _, isOrb = self:GetGrabTarget()
-            if wTarget and wPred then
-                if
-                    myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and not self.spell.w.heldInfo and
-                        (not myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready or
-                            (isOrb or not myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready) or
-                            not self:WaitToInitialize()) and
-                        self:CastW1()
-                 then
-                    --PrintChat("W1")
-                    return
+        if Orbwalker:GetMode() == "Combo" then
+            if w then
+                local wTarget, wPred =
+                    self:GetTarget(
+                    self.spell.w,
+                    false,
+                    function(unit)
+                        return self.unitsInRange[unit.networkId]
+                    end
+                )
+                local _, isOrb = self:GetGrabTarget()
+                if wTarget and wPred then
+                    if w1 and (e or (isOrb or notQ) or not self:WaitToInitialize()) and self:CastW1() then
+                        return
+                    end
+                    if
+                        self.spell.w.heldInfo and
+                            (notE or
+                                GetDistanceSqr(wPred.castPosition) >=
+                                    (self.spell.e.range - 50) * (self.spell.e.range - 50)) and
+                            self:CastW2(wPred)
+                     then
+                        return
+                    end
                 end
-                if
-                    self.spell.w.heldInfo and
-                        (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
-                            GetDistance(wPred.castPosition) >= self.spell.e.range - 50) and
-                        self:CastW2(wPred)
-                 then
-                    --PrintChat("W2")
+            end
+            if q and e and myHero.mana >= 80 + 10 * myHero.spellbook:Spell(0).level then
+                self.spell.qe.delay = 0.25 + NetClient.ping / 1000
+                local qeTarget, qePred =
+                    self:GetTarget(
+                    self.spell.qe,
+                    false,
+                    function(unit)
+                        return self.unitsInRange[unit.networkId] and self:CalcQELong(unit, self.spell.q.range - 100) and
+                            unit
+                    end
+                )
+
+                if qeTarget and qePred and qePred.castPosition and self.menu.qe2:get() and self:CastQELong(qePred) then
                     return
                 end
             end
         end
-        self.spell.qe.delay = 0.25 + NetClient.ping / 1000
-        local qeTarget, qePred =
-            self:GetTarget(
-            self.spell.qe,
-            false,
-            function(unit)
-                self:CalcQELong(unit, self.spell.q.range - 100)
-                return unit
-            end
-        )
-        if
-            qeTarget and qePred and qePred.castPosition and Orbwalker:GetMode() == "Combo" and
-                not Orbwalker:IsAttacking() and
-                self.menu.qe2:get() and
-                self:CastQELong(qePred)
-         then
-            return
-        end
-        if myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready and not Orbwalker:IsAttacking() then
-            local qTarget, qPred = self:GetTarget(self.spell.q)
+
+        if q then
+            local qTarget, qPred =
+                self:GetTarget(
+                self.spell.q,
+                false,
+                function(unit)
+                    return self.unitsInRange[unit.networkId]
+                end
+            )
             if qTarget and qPred then
                 if
                     ((Orbwalker:GetMode() == "Combo" and
-                        (myHero.spellbook:CanUseSpell(SpellSlot.E) ~= SpellState.Ready or
-                            GetDistance(qPred.castPosition) >= self.spell.e.range)) or
+                        (notE or GetDistanceSqr(qPred.castPosition) >= self.spell.e.range * self.spell.e.range)) or
                         Orbwalker:GetMode() == "Harass") and
                         self:CastQ(qPred)
                  then
@@ -426,11 +460,7 @@ function Syndra:ShouldCast()
 end
 
 function Syndra:AutoGrab()
-    if
-        myHero.spellbook:CanUseSpell(SpellSlot.W) == SpellState.Ready and
-            myHero.spellbook:Spell(SpellSlot.W).name == "SyndraW" and
-            not _G.Prediction.IsRecalling(myHero)
-     then
+    if not _G.Prediction.IsRecalling(myHero) then
         for _, minion in pairs(ObjectManager:GetEnemyMinions()) do
             if
                 (minion.name == "Tibbers" or minion.name == "IvernMinion" or minion.name == "H-28G Evolution Turret") and
@@ -462,7 +492,7 @@ function Syndra:GetGrabTarget()
         local orb = self.orbs[i]
         if
             not self.spell.w.blacklist[i] and orb.isInitialized and orb.endT < lowTime and
-                GetDistance(orb.obj.position) <= self.spell.w.range
+                GetDistanceSqr(orb.obj.position) <= self.spell.w.range * self.spell.w.range
          then
             lowTime = orb.endT
             lowOrb = orb.obj
@@ -476,7 +506,10 @@ function Syndra:GetGrabTarget()
     local lowHealth = math.huge
     local lowMinion = nil
     for _, minion in ipairs(minionsInRange) do
-        if minion and _G.Prediction.IsValidTarget(minion) and GetDistance(minion.position) <= self.spell.w.range then
+        if
+            minion and _G.Prediction.IsValidTarget(minion) and
+                GetDistanceSqr(minion.position) <= self.spell.w.range * self.spell.w.range
+         then
             if minion.health < lowHealth then
                 lowHealth = minion.health
                 lowMinion = minion
@@ -512,13 +545,46 @@ function Syndra:CastW2(pred)
     end
 end
 
+function Syndra:CastShortEMode(mode)
+    local eTarget, ePred =
+        self:GetTarget(
+        self.spell.e,
+        false,
+        function(unit)
+            if not self.unitsInRange[unit.networkId] then
+                return
+            end
+            self:CalcQEShort(unit, self.spell.e.widthMax, mode)
+            return unit
+        end,
+        function(unit, pred)
+            if not pred then
+                return
+            end
+            return Orbwalker:GetMode() == "Combo" or
+                pred.targetDashing and self.antiGapHeros[unit.networkId] and self.menu.antigap[unit.charName]:get()
+        end
+    )
+    if eTarget and ePred then
+        local castPosition = self:GetCastPosition(ePred)
+
+        if
+            self:CanEQ(self:GetQPos(castPosition, "q"), ePred, eTarget) and
+                ((mode == "q" and self:CastQEShort(ePred)) or self:CastWE(ePred))
+         then
+            return true
+        end
+    end
+end
+
 function Syndra:CanEQ(qPos, pred, target)
     --wall check
     local interval = 100
-    local count = math.floor(GetDistance(pred.castPosition, qPos:toDX3()) / interval)
+    local castPosition = self:GetCastPosition(pred)
+    local count = math.floor(GetDistance(castPosition, qPos:toDX3()) / interval)
     local diff = (Vector(qpos) - Vector(myHero.position)):normalized()
     for i = 0, count do
-        local pos = (Vector(pred.castPosition) + diff * i * interval):toDX3()
+        local pos = (Vector(castPosition) + diff * i * interval):toDX3()
         if NavMesh:IsWall(pos) or NavMesh:IsBuilding(pos) then
             return false
         end
@@ -531,41 +597,70 @@ function Syndra:CanEQ(qPos, pred, target)
     return true
 end
 
-function Syndra:CalcQELong(target, dist)
-    local dist = dist or self.spell.e.range
-    self.spell.qe.speed = self.spell.qe.pingPongSpeed
-    local pred
-    local last = 0
-    while math.abs(self.spell.qe.speed - last) > 10 do
-        pred = _G.Prediction.GetPrediction(target, self.spell.qe, myHero)
-        if pred and pred.castPosition then
-            last = self.spell.qe.speed
-            self.spell.qe.speed =
-                (self.spell.e.speed * dist + self.spell.qe.pingPongSpeed * (GetDistance(pred.castPosition) - dist)) /
-                GetDistance(pred.castPosition)
-        else
-            return
+function Syndra:CheckForSame(list)
+    if #list > 2 then
+        local last = list[#list]
+        for i = #list - 1, 1, -1 do
+            if math.abs(last - list[i]) < 0.01 then
+                local maxInd = 0
+                local maxVal = 0
+                for j = i + 1, #list do
+                    if list[j] > maxVal then
+                        maxInd = j
+                        maxVal = list[j]
+                    end
+                end
+                return maxInd
+            end
         end
     end
 end
 
-function Syndra:CalcQEShort(target, widthMax)
+function Syndra:CalcQELong(target, dist)
+    local dist = dist or self.spell.e.range
+    self.spell.qe.speed = self.spell.qe.pingPongSpeed
+    local pred
+    local lasts = {}
+    local check = nil
+
+    while not check do
+        pred = _G.Prediction.GetPrediction(target, self.spell.qe, myHero)
+        if pred and pred.castPosition and GetDistanceSqr(pred.targetPosition) >= self.spell.e.range * self.spell.e.range then
+            local castPosition, isAdjusted = self:GetCastPosition(pred)
+            local offset = isAdjusted and -target.boundingRadius or 0
+            self.spell.qe.speed =
+                (self.spell.e.speed * dist + self.spell.qe.pingPongSpeed * (GetDistance(castPosition) + offset - dist)) /
+                (GetDistance(castPosition) + offset)
+            lasts[#lasts + 1] = self.spell.qe.speed
+            check = self:CheckForSame(lasts)
+        else
+            return
+        end
+    end
+    self.spell.qe.speed = lasts[check]
+    return true
+end
+
+function Syndra:CalcQEShort(target, widthMax, spell)
     self.spell.e.width = widthMax
     local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
-    local last = 0
-    while math.abs(self.spell.e.width - last) > 1 do
+    local lasts = {}
+    local check = nil
+    while not check do
         pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
         if not (pred and pred.castPosition) then
             return
         end
-        last = self.spell.e.width
+        local castPosition, isAdjusted = self:GetCastPosition(pred)
+        local offset = isAdjusted and 0 or target.boundingRadius
         self.spell.e.width =
             -target.boundingRadius +
-            (GetDistance(pred.castPosition) - target.boundingRadius) /
-                GetDistance(self:GetQPos(pred.castPosition):toDX3()) *
-                (widthMax + target.boundingRadius) -
-            10
+            (GetDistance(castPosition) + offset) / (GetDistance(self:GetQPos(castPosition, spell):toDX3()) + offset) *
+                (widthMax + target.boundingRadius)
+        lasts[#lasts + 1] = self.spell.e.width
+        check = self:CheckForSame(lasts)
     end
+    self.spell.e.width = lasts[check]
     return pred
 end
 
@@ -592,29 +687,33 @@ function Syndra:CastE(target, canHitOrbs)
             --check which orbs can hit enemy
             for i = 1, #canHitOrbs do
                 local orb = canHitOrbs[i]
-                if GetDistance(checkPred.castPosition) > GetDistance(orb.obj.position) then
+                local castPosition = self:GetCastPosition(checkPred)
+                if GetDistanceSqr(castPosition) > GetDistanceSqr(orb.obj.position) then
                     self:CalcQELong(target, GetDistance(orb.obj.position))
                     local seg =
                         LineSegment(
                         Vector(myHeroPred):extended(Vector(orb.obj.position), self.spell.qe.range),
                         Vector(myHeroPred)
                     )
-                    if seg:distanceTo(Vector(checkPred.castPosition)) <= checkWidth / 2 then
+                    if seg:distanceTo(Vector(castPosition)) <= checkWidth / 2 then
                         collOrbs[orb] = 0
                     end
                 else
-                    local pred = self:CalcQEShort(target, checkWidth)
-                    if pred and pred.castPosition and GetDistanceSqr(pred.castPosition, orb.obj.position) <= 400 * 400 then
-                        local seg =
-                            LineSegment(
-                            Vector(myHeroPred):extended(Vector(orb.obj.position), self.spell.qe.range),
-                            Vector(myHeroPred)
-                        )
-                        if
-                            seg:distanceTo(self:GetQPos(pred.castPosition)) <= checkWidth / 2 and
-                                self:CanEQ(self:GetQPos(pred.castPosition), pred, target)
-                         then
-                            collOrbs[orb] = 0
+                    local pred = self:CalcQEShort(target, checkWidth, "q")
+                    if pred and pred.castPosition then
+                        local castPosition = self:GetCastPosition(pred)
+                        if GetDistanceSqr(castPosition, orb.obj.position) <= 400 * 400 then
+                            local seg =
+                                LineSegment(
+                                Vector(myHeroPred):extended(Vector(orb.obj.position), self.spell.qe.range),
+                                Vector(myHeroPred)
+                            )
+                            if
+                                seg:distanceTo(self:GetQPos(castPosition)) <= checkWidth / 2 and
+                                    self:CanEQ(self:GetQPos(castPosition), pred, target)
+                             then
+                                collOrbs[orb] = 0
+                            end
                         end
                     end
                 end
@@ -655,36 +754,36 @@ function Syndra:CastQEShort(pred)
                 self.spell.e.next.time <=
                     os.clock() + self.spell.e.delay + GetDistance(pred.castPosition) / self.spell.e.speed)
      then
-        myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(pred.castPosition, 200):toDX3())
+        local castPosition = self:GetCastPosition(pred)
+        myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(castPosition, "q"):toDX3())
         self.last.q = os.clock()
         pred:draw()
-        self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1 + NetClient.ping / 1000, spell = 0}
+        self.spell.e.queue = {pos = castPosition, time = os.clock() + 0.1 + NetClient.ping / 1000, spell = 0}
         return true
     end
 end
 
 function Syndra:CastQELong(pred)
-    if
-        myHero.spellbook:CanUseSpell(SpellSlot.Q) == SpellState.Ready and
-            myHero.spellbook:CanUseSpell(SpellSlot.E) == SpellState.Ready and
-            myHero.mana >= 80 + 10 * myHero.spellbook:Spell(0).level and
-            GetDistanceSqr(pred.castPosition) >= (self.spell.e.range - 50) * (self.spell.e.range - 50) and
-            pred.rates["slow"]
-     then
+    if pred.rates["slow"] then
         local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
-        local qPos = Vector(myHeroPred):extended(Vector(pred.castPosition), (self.spell.q.range - 100)):toDX3()
+        local castPosition = self:GetCastPosition(pred)
+        local qPos = Vector(myHeroPred):extended(Vector(castPosition), (self.spell.q.range - 100)):toDX3()
         myHero.spellbook:CastSpell(SpellSlot.Q, qPos)
         self.last.q = os.clock()
         pred:draw()
-        self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1 + NetClient.ping / 1000, spell = 0}
+        self.spell.e.queue = {pos = castPosition, time = os.clock() + 0.1 + NetClient.ping / 1000, spell = 0}
         return true
     end
 end
 
-function Syndra:GetQPos(predPos, offset)
-    offset = offset or 0
+function Syndra:GetQPos(predPos, spell)
     local myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
-    return Vector(myHeroPred):extended(Vector(predPos), math.min(GetDistance(predPos) + 450 - offset, 850 - offset))
+    if spell == "q" then
+        return Vector(myHeroPred):extended(Vector(predPos), math.max(GetDistance(predPos) + 50, 550))
+    elseif spell == "w" then
+        return Vector(myHeroPred):extended(Vector(predPos), math.max(GetDistance(predPos) + 50, 600))
+    end
+    return Vector(myHeroPred):extended(Vector(predPos), math.min(GetDistance(predPos) + 450, 850))
 end
 
 function Syndra:CastWE(pred)
@@ -695,10 +794,12 @@ function Syndra:CastWE(pred)
             self.spell.w.heldInfo and
             self.spell.w.heldInfo.isOrb
      then
-        myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition, 200):toDX3())
+        local castPosition = self:GetCastPosition(pred)
+
+        myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(castPosition, "q"):toDX3())
         self.last.w = os.clock()
         pred:draw()
-        self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
+        self.spell.e.queue = {pos = castPosition, time = os.clock() + 0.1, spell = 1}
         return true
     end
 end
@@ -727,7 +828,7 @@ end
 
 function Syndra:RExecutes(target)
     local count = math.min(7, 3 + #self.orbs)
-    local base = count * (45 + 45 * myHero.spellbook:Spell(SpellSlot.R).level + 0.2 * self:GetTotalAp())
+    local base = count * (45 + 50 * myHero.spellbook:Spell(SpellSlot.R).level + 0.2 * self:GetTotalAp())
     local buffs = myHero.buffManager.buffs
     for i = 1, #buffs do
         local buff = buffs[i]
@@ -759,11 +860,12 @@ function Syndra:RConditions(target)
     if not canExecute then
         return false
     end
+    local rDist = 675 + (myHero.spellbook:Spell(SpellSlot.R).level / 3) * 75
     if
         not (Orbwalker:GetMode() == "Combo" and myHero.spellbook:CanUseSpell(SpellSlot.R) == SpellState.Ready and
             self.menu.r[target.charName] and
             self.menu.r[target.charName]:get() and
-            GetDistance(target.position) <= 675 + (myHero.spellbook:Spell(SpellSlot.R).level / 3) * 75)
+            GetDistanceSqr(target.position) <= rDist * rDist)
      then
         return false
     end
@@ -799,16 +901,16 @@ function Syndra:RConditions(target)
 
     enemiesInRange1, enemiesInRange2, alliesInRange = 0, 0, 0
     for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
-        if GetDistance(enemy.position) <= 800 then
+        if GetDistanceSqr(enemy.position) <= 800 * 800 then
             enemiesInRange1 = enemiesInRange1 + 1
         end
-        if GetDistance(enemy.position) <= 2500 then
+        if GetDistanceSqr(enemy.position) <= 2500 * 2500 then
             enemiesInRange2 = enemiesInRange2 + 1
         end
     end
 
     for _, ally in pairs(ObjectManager:GetAllyHeroes()) do
-        if GetDistance(ally.position) <= 800 then
+        if GetDistanceSqr(ally.position) <= 800 * 800 then
             alliesInRange = alliesInRange + 1
         end
     end
@@ -844,16 +946,11 @@ end
 
 function Syndra:OnCreateObj(obj)
     if obj.name == "Seed" and obj.team == myHero.team then
-        local replaced = false
         for i in pairs(self.orbs) do
             local orb = self.orbs[i]
             if not orb.isInitialized and GetDistanceSqr(obj.position, orb.obj.position) == 0 then
                 self.orbs[i] = {obj = obj, isInitialized = true, endT = os.clock() + 6.25}
-                replaced = true
             end
-        end
-        if not replaced then
-            self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = true, endT = os.clock() + 6.25}
         end
     end
     if string.match(obj.name, "Syndra") then
@@ -985,7 +1082,7 @@ function Syndra:OnProcessSpell(obj, spell)
                 self.spell.e.queue = nil
             end
             self.spell.e.next = {
-                time = os.clock() + GetDistance(spell.endPos, spell.startPos) / self.spell.w.speed,
+                time = os.clock() + self.spell.w.delay,
                 pos = spell.endPos
             }
         elseif spell.spellData.name == "SyndraE" then

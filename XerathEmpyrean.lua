@@ -29,7 +29,7 @@ function OnLoad()
     end
 
     Orbwalker:Setup()
-    Xerath:__init()
+    Xerath:__init() 
 end
 
 function Xerath:__init()
@@ -66,7 +66,7 @@ function Xerath:__init()
     self.r = {
         type = "circular",
         active = false,
-        range = 80000,
+        range = 5000,
         delay = 0.7,
         radius = 200,
         speed = math.huge,
@@ -101,7 +101,7 @@ function Xerath:__init()
         }
     )
     AddEvent(
-        Events.OnTick,  
+        Events.OnTick,
         function()
             self:OnTick()
         end
@@ -135,7 +135,7 @@ function Xerath:__init()
 end
 
 function Xerath:Menu()
-    self.menu = Menu("asdfxerath", "Xerath")
+    self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean")
 
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("antigap", "Anti Gapclose")
@@ -200,7 +200,6 @@ function Xerath:OnDraw()
     DrawHandler:Circle3D(myHero.position, range, Color.White)
 
     if myHero.spellbook:Spell(SpellSlot.R).level > 0 then
-        self.r.range = self:GetRRange()
         DrawHandler:Circle3D(myHero.position, self.r.range, Color.White)
         local radius = TacticalMap.width * self.r.range / 14692
         self:DrawMinimapCircle(myHero, self.r.range, Color.White)
@@ -243,15 +242,16 @@ function Xerath:EdgePosition(pred, target)
     local width = self.q.width / 2 + target.boundingRadius
     local dist = GetDistance(targetPos)
     local angle = math.asin(width / dist)
-    local myHeroVec = _G.Prediction.GetUnitPosition(myHero, 0.06 + NetClient.ping / 1000)
+    local myHeroVec = _G.Prediction.GetUnitPosition(myHero, 0.06 + NetClient.ping / 2000)
     local diff = targetVec - myHeroVec
     local rotated1 = diff:rotated(0, angle, 0)
     local rotated2 = diff:rotated(0, -angle, 0)
     local distToCast = math.sqrt(dist * dist - width * width)
     local castPos1 = (myHeroVec + rotated1:normalized() * distToCast):toDX3()
     local castPos2 = (myHeroVec + rotated2:normalized() * distToCast):toDX3()
-    local res = GetDistance(castPos1, target.position) < GetDistance(castPos2, target.position) and castPos1 or castPos2
-    local seg1 = LineSegment(myHeroVec, res)
+    local res = GetDistance(castPos1, targetPos) < GetDistance(castPos2, targetPos) and castPos1 or castPos2
+    local maxPos = myHeroVec + (Vector(res) - myHeroVec):normalized() * (self.q.max + 100)
+    local seg1 = LineSegment(myHeroVec, maxPos)
     local seg2 = LineSegment(Vector(target.position), targetVec)
     local _, intersection = seg1:intersects(seg2)
     if intersection then
@@ -312,9 +312,7 @@ function Xerath:CastE(pred)
     end
 end
 
-function Xerath:GetRRange()
-    return 2000 + 1200 * myHero.spellbook:Spell(3).level
-end
+
 
 function Xerath:CastTrinket()
     if
@@ -330,7 +328,6 @@ end
 
 function Xerath:CastR()
     if self.menu.tap:get() and myHero.spellbook:CanUseSpell(3) == 0 then
-        self.r.range = self:GetRRange()
         local maxRangeSqr = self.menu.rr:get() * self.menu.rr:get()
         local mouseTarget, mousePred =
             self.TS:GetTarget(
@@ -394,7 +391,7 @@ function Xerath:OnTick()
         UnitsInRange[enemy.index] = InComboRange(enemy)
     end
 
-    local ComboMode = Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking()
+    local ComboMode = Orbwalker:GetMode() == "Combo"
     local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
 
     -- Will waste pred calls without these conditions as well as call Cast when can't cast
@@ -493,7 +490,7 @@ function Xerath:OnBuffLost(unit, buff)
         if buff.name == "XerathArcanopulseChargeUp" then
             Orbwalker:BlockAttack(false)
 
-            self.QTracker.Active = false
+            self.QTracker.Active = falses
         elseif buff.name == "XerathLocusOfPower2" then
             Orbwalker:BlockAttack(false)
             Orbwalker:BlockMove(false)
