@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 2.5
+local version = 2.51
 if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
     DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
     print("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
@@ -86,7 +86,6 @@ function Syndra:init()
             queue = nil,
             blacklist = {},
             next = nil,
-            castRate = "slow",
             collision = {
                 ["Wall"] = true,
                 ["Hero"] = false,
@@ -480,6 +479,7 @@ function Syndra:CastQ(pred)
             myHero.spellbook:CastSpell(SpellSlot.Q, pred.castPosition)
             self.last.q = os.clock()
             pred:draw()
+            PrintChat("q")
             return true
         end
     end
@@ -526,6 +526,7 @@ function Syndra:CastW1()
     if target then
         myHero.spellbook:CastSpell(SpellSlot.W, target.position)
         self.last.w = os.clock()
+        PrintChat("w1" .. target.name .. GetDistance(target.position))
         return true
     end
 end
@@ -541,6 +542,7 @@ function Syndra:CastW2(pred)
         myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
         self.last.w = os.clock()
         pred:draw()
+        PrintChat("w2")
         return true
     end
 end
@@ -558,7 +560,7 @@ function Syndra:CastShortEMode(mode)
             return unit
         end,
         function(unit, pred)
-            if not pred then
+            if not pred and not pred.rates["slow"] then
                 return
             end
             return Orbwalker:GetMode() == "Combo" or
@@ -566,12 +568,12 @@ function Syndra:CastShortEMode(mode)
         end
     )
     if eTarget and ePred then
-        local castPosition = self:GetCastPosition(ePred)
-
         if
-            self:CanEQ(self:GetQPos(castPosition, "q"), ePred, eTarget) and
+            self:CanEQ(self:GetQPos(ePred.castPosition, "q"), ePred, eTarget) and
                 ((mode == "q" and self:CastQEShort(ePred)) or self:CastWE(ePred))
          then
+            PrintChat("e short")
+
             return true
         end
     end
@@ -610,7 +612,7 @@ function Syndra:CheckForSame(list)
                         maxVal = list[j]
                     end
                 end
-                return maxInd
+                return maxVal
             end
         end
     end
@@ -637,7 +639,7 @@ function Syndra:CalcQELong(target, dist)
             return
         end
     end
-    self.spell.qe.speed = lasts[check]
+    self.spell.qe.speed = check
     return true
 end
 
@@ -651,16 +653,16 @@ function Syndra:CalcQEShort(target, widthMax, spell)
         if not (pred and pred.castPosition) then
             return
         end
-        local castPosition, isAdjusted = self:GetCastPosition(pred)
-        local offset = isAdjusted and 0 or target.boundingRadius
         self.spell.e.width =
             -target.boundingRadius +
-            (GetDistance(castPosition) + offset) / (GetDistance(self:GetQPos(castPosition, spell):toDX3()) + offset) *
+            (GetDistance(pred.castPosition) + target.boundingRadius) /
+                (GetDistance(self:GetQPos(pred.castPosition, spell):toDX3()) + target.boundingRadius) *
                 (widthMax + target.boundingRadius)
         lasts[#lasts + 1] = self.spell.e.width
         check = self:CheckForSame(lasts)
     end
-    self.spell.e.width = lasts[check]
+    self.spell.e.width = check
+    print(self.spell.e.width)
     return pred
 end
 
@@ -739,6 +741,8 @@ function Syndra:CastE(target, canHitOrbs)
             if maxHit > 0 and maxOrb then
                 myHero.spellbook:CastSpell(SpellSlot.E, maxOrb.obj.position)
                 self.last.e = os.clock()
+                PrintChat("e")
+
                 return true
             end
         end
@@ -754,11 +758,10 @@ function Syndra:CastQEShort(pred)
                 self.spell.e.next.time <=
                     os.clock() + self.spell.e.delay + GetDistance(pred.castPosition) / self.spell.e.speed)
      then
-        local castPosition = self:GetCastPosition(pred)
-        myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(castPosition, "q"):toDX3())
+        myHero.spellbook:CastSpell(SpellSlot.Q, self:GetQPos(pred.castPosition, "q"):toDX3())
         self.last.q = os.clock()
         pred:draw()
-        self.spell.e.queue = {pos = castPosition, time = os.clock() + 0.1 + NetClient.ping / 1000, spell = 0}
+        self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1 + NetClient.ping / 1000, spell = 0}
         return true
     end
 end
@@ -794,12 +797,10 @@ function Syndra:CastWE(pred)
             self.spell.w.heldInfo and
             self.spell.w.heldInfo.isOrb
      then
-        local castPosition = self:GetCastPosition(pred)
-
-        myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(castPosition, "q"):toDX3())
+        myHero.spellbook:CastSpell(SpellSlot.W, self:GetQPos(pred.castPosition, "q"):toDX3())
         self.last.w = os.clock()
         pred:draw()
-        self.spell.e.queue = {pos = castPosition, time = os.clock() + 0.1, spell = 1}
+        self.spell.e.queue = {pos = pred.castPosition, time = os.clock() + 0.1, spell = 1}
         return true
     end
 end
@@ -940,17 +941,23 @@ function Syndra:CastR(target)
         end
         myHero.spellbook:CastSpell(SpellSlot.R, target.networkId)
         self.last.r = os.clock()
+        PrintChat("r")
         return true
     end
 end
 
 function Syndra:OnCreateObj(obj)
-    if obj.name == "Seed" and obj.team == myHero.team then
+    if obj.name == "Seed" and obj.team == myHero.team and obj.spellbook.owner.charName == "SyndraSphere" then
+        local replaced = false
         for i in pairs(self.orbs) do
             local orb = self.orbs[i]
             if not orb.isInitialized and GetDistanceSqr(obj.position, orb.obj.position) == 0 then
                 self.orbs[i] = {obj = obj, isInitialized = true, endT = os.clock() + 6.25}
+                replaced = true
             end
+        end
+        if not replaced then
+            self.orbs[#self.orbs + 1] = {obj = obj, isInitialized = true, endT = os.clock() + 6.25}
         end
     end
     if string.match(obj.name, "Syndra") then
