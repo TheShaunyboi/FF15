@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 2.7
+local version = 2.71
 if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
     DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
     print("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
@@ -435,7 +435,7 @@ function Syndra:OnDraw()
 
     DrawHandler:Circle3D(myHero.position, self.spell.qe.range, Color.White)
 
-    for i in pairs(self.orbs) do
+   --[[  for i in pairs(self.orbs) do
         local orb = self.orbs[i]
         DrawHandler:Circle3D(orb.obj.position, 40, orb.isInitialized and Color.SkyBlue or Color.Red)
         DrawHandler:Text(
@@ -444,7 +444,7 @@ function Syndra:OnDraw()
             math.ceil(orb.endT - os.clock()),
             Color.White
         )
-        if GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range then
+        if GetDistanceSqr(orb.obj.posit ion) <= self.spell.q.range * self.spell.q.range then
             local new_pos = Vector(myHero):extended(Vector(orb.obj.position), self.spell.qe.range)
             _G.Prediction.Drawing.DrawRectangle(
                 myHero.position,
@@ -467,12 +467,12 @@ function Syndra:OnDraw()
             DrawHandler:Circle3D(self.orbs[i].obj.position, 50, Color.Pink)
         end
     end
-
+ ]]
     local text =
         (self.menu.qe2:get() and "QE Long: On" or "QE Long: Off") ..
         "\n" .. (self.menu.e:get() and "Auto E: On" or "Auto E: Off")
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
-    if myHero.spellbook:CanUseSpell(SpellSlot.R) == SpellState.Ready then
+    --[[ if myHero.spellbook:CanUseSpell(SpellSlot.R) == SpellState.Ready then
         for target, damage in pairs(self.rDamages) do
             local hpBarPos = target.infoComponent.hpBarScreenPosition
             local xPos = hpBarPos.x - 44 + 104 * damage / (target.maxHealth + target.allShield)
@@ -480,7 +480,7 @@ function Syndra:OnDraw()
             local endPos = D3DXVECTOR2(xPos, hpBarPos.y - 13)
             DrawHandler:Line(startPos, endPos, Color.SkyBlue)
         end
-    end
+    end ]]
 end
 
 function Syndra:WaitToInitialize()
