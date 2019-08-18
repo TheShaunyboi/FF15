@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 2.3
+local version = 2.31
 if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
@@ -13,40 +13,9 @@ local Orbwalker = require "FF15OL"
 local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
 
-local function EdgePosition2(tP, cP, source, adjustment, target, range)
-    tP = Vector(tP)
-    cP = Vector(cP)
-    local dist = source:dist(tP)
-    adjustment = 0.95 * adjustment
-    local angle = math.asin(adjustment / dist)
-    local diff = tP - source
-    local rotated1 = diff:rotated(0, angle, 0):normalized()
-    local rotated2 = diff:rotated(0, -angle, 0):normalized()
-    local distToCast = math.sqrt(dist * dist - adjustment * adjustment)
-    local castPos1 = (source + rotated1 * distToCast):D3D()
-    local castPos2 = (source + rotated2 * distToCast):D3D()
-    local res = GetDistanceSqr(castPos1, tP:D3D()) < GetDistanceSqr(castPos2, tP:D3D()) and castPos1 or castPos2
-    local maxPos = source + (Vector(res) - source):normalized() * (range + 100)
-    local seg1 = LineSegment(source, maxPos)
-    local seg2 = LineSegment(Vector(target.position), tP)
-    local isIntersect, intersection = seg1:intersects(seg2)
-    if isIntersect and intersection then
-        local intersectionVector = Vector(intersection.x, myHero.position.y, intersection.z)
-        local intersectionAngle = intersectionVector:angleBetween(source, tP)
-        if intersectionAngle > 45 and intersectionAngle < 135 then
-            return res, true
-        else
-            return cP:D3D(), false
-        end
-    else
-        return cP:D3D(), false
-    end
-end
-
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
-        _G.EdgePosition = EdgePosition2
     end
     if not _G.AuroraOrb and not _G.LegitOrbwalker then
         LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
@@ -189,8 +158,10 @@ end
 function Ezreal:GetCastPosition(pred)
     pred:draw()
     if pred.isAdjusted then
+        PrintChat("adjusted")
         return pred.ap
     else
+        PrintChat("regular")
         return pred.castPosition
     end
 end
