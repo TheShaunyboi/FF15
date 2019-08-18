@@ -1,5 +1,5 @@
 local Kaisa = {}
-local version = 1.5
+local version = 1.6
 if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
     DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
@@ -12,14 +12,10 @@ function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
-    if not _G.AuroraOrb and not _G.LegitOrbwalker then
-        LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
-    end
-
-    Orbwalker:Setup()
 end
 
 function Kaisa:__init()
+    self.orbSetup = false
     self.qRange = 600
     self.w = {
         searchRange = 400,
@@ -167,13 +163,19 @@ function Kaisa:CastW(target)
 end
 
 function Kaisa:OnTick()
-    if self.menu.q:get() then
-        self:CastQ()
+    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
+        Orbwalker:Setup()
+        self.orbSetup = true
     end
-    if Orbwalker:GetMode() == "Combo" then
-        self:CastQ()
-        if not Orbwalker:IsAttacking() then
-            self:W()
+    if self.orbSetup then
+        if self.menu.q:get() then
+            self:CastQ()
+        end
+        if Orbwalker:GetMode() == "Combo" then
+            self:CastQ()
+            if not Orbwalker:IsAttacking() then
+                self:W()
+            end
         end
     end
 end

@@ -2,10 +2,8 @@ if myHero.charName ~= "Xerath" then
     return
 end
 
-local CastModeOptions = {"slow", "very slow"}
-
 local Xerath = {}
-local version = 3.3
+local version = 3.4
 
 if tonumber(GetInternalWebResult("XerathEmpyrean.version")) > version then
     DownloadInternalFile("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua")
@@ -17,7 +15,6 @@ require("utils")
 local DreamTS = require("DreamTS")
 local Orbwalker = require("FF15OL")
 local Vector = require("GeometryLib").Vector
-local LineSegment = require("GeometryLib").LineSegment
 
 function OnLoad()
     if not _G.Prediction then
@@ -29,10 +26,11 @@ function OnLoad()
     end
 
     Orbwalker:Setup()
-    Xerath:__init() 
+    Xerath:__init()
 end
 
 function Xerath:__init()
+    self.orbSetup = false
     self.q = {
         type = "linear",
         last = nil,
@@ -138,21 +136,8 @@ function Xerath:Menu()
     self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean")
 
     self.menu:sub("dreamTs", "Target Selector")
-    self.menu:sub("antigap", "Anti Gapclose")
-    self.antiGapHeros = {}
-    for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
-        self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
-        self.antiGapHeros[enemy.networkId] = true
-    end
     self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt)
-
-    self.menu:sub("spells", "Spell cast rates")
-    self.menu.spells:list("q", "Q", 2, CastModeOptions)
-    self.menu.spells:list("w", "W", 2, CastModeOptions)
-    self.menu.spells:list("e", "E", 2, CastModeOptions)
-    self.menu.spells:list("r", "R", 2, CastModeOptions)
-
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Tap Key", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
@@ -183,10 +168,6 @@ function Xerath:ShouldCast()
     end
 
     return true
-end
-
-function Xerath:GetCastRate(spell)
-    return CastModeOptions[self.menu.spells[spell].value]
 end
 
 function Xerath:OnDraw()
@@ -220,7 +201,7 @@ function Xerath:CastQ(pred, target)
         return self:CastQ2(pred, isQActive and self:GetQRange(remainingTime) or self.q.max, target, remainingTime)
     elseif
         pred.rates["instant"] and GetDistanceSqr(pred.castPosition) > self.q.min * self.q.min or
-            pred.rates[self:GetCastRate("q")] and GetDistanceSqr(pred.castPosition) <= self.q.min * self.q.min
+            pred.rates["very slow"] and GetDistanceSqr(pred.castPosition) <= self.q.min * self.q.min
      then
         myHero.spellbook:CastSpell(0, pred.castPosition)
         self.LastCasts.Q1 = RiotClock.time
@@ -274,7 +255,7 @@ function Xerath:CastQ2(pred, range, target, remainingTime)
     local forceCast = (remainingTime and remainingTime < .1 and pred.rates["instant"])
     local rangeAdjust = range - 100
 
-    if pred.rates[self:GetCastRate("q")] or forceCast then
+    if pred.rates["very slow"] or forceCast then
         if forceCast or (pred.isMoving and not pred.targetDashing) then
             if dist > rangeAdjust * rangeAdjust then
                 return
@@ -295,7 +276,7 @@ function Xerath:CastQ2(pred, range, target, remainingTime)
 end
 
 function Xerath:CastW(pred)
-    if pred.rates[self:GetCastRate("w")] then
+    if pred.rates["very slow"] then
         myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
         self.LastCasts.W = RiotClock.time
         pred:draw()
@@ -304,15 +285,13 @@ function Xerath:CastW(pred)
 end
 
 function Xerath:CastE(pred)
-    if pred.rates[self:GetCastRate("e")] then
+    if pred.rates["very slow"] then
         myHero.spellbook:CastSpell(2, pred.castPosition)
         self.LastCasts.E = RiotClock.time
         pred:draw()
         return true
     end
 end
-
-
 
 function Xerath:CastTrinket()
     if
@@ -349,7 +328,7 @@ function Xerath:CastR()
         end
 
         if mouseTarget and mousePred then
-            if mousePred.rates[self:GetCastRate("r")] then
+            if mousePred.rates["very slow"] then
                 myHero.spellbook:CastSpell(3, mousePred.castPosition)
                 self.LastCasts.R = RiotClock.time
                 self.r.lastTarget = mouseTarget
@@ -358,7 +337,7 @@ function Xerath:CastR()
                 return true
             end
         elseif (not self.r.mode) and allTarget and allPred then
-            if allPred.rates[self:GetCastRate("r")] then
+            if allPred.rates["very slow"] then
                 myHero.spellbook:CastSpell(3, allPred.castPosition)
                 self.LastCasts.R = RiotClock.time
                 self.r.lastTarget = allTarget
@@ -380,82 +359,83 @@ local function InComboRangeCallback(unit)
 end
 
 function Xerath:OnTick()
+    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
+        Orbwalker:Setup()
+        self.orbSetup = true
+    end
     if myHero.dead then
         return
     end
+    if self.orbSetup then
+        local qActive = self:IsQActive()
+        local rActive = self:IsRActive()
 
-    local qActive = self:IsQActive()
-    local rActive = self:IsRActive()
+        for i, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+            UnitsInRange[enemy.index] = InComboRange(enemy)
+        end
 
-    for i, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
-        UnitsInRange[enemy.index] = InComboRange(enemy)
-    end
+        local ComboMode = Orbwalker:GetMode() == "Combo"
+        local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
 
-    local ComboMode = Orbwalker:GetMode() == "Combo"
-    local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
-
-    -- Will waste pred calls without these conditions as well as call Cast when can't cast
-    if not qActive and self:ShouldCast() then
-        if rActive then
-            if self:CastTrinket() or self:CastR() then
-                return
-            end
-        else
-            self.r.lastTarget = nil
-            self.r.mode = nil
-
-            if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
-                local e_targets, e_preds =
-                    self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
-
-                for i = 1, #e_targets do
-                    local unit = e_targets[i]
-                    local pred = e_preds[unit.networkId]
-                    if pred then
-                        if
-                            pred.targetDashing and self.antiGapHeros[unit.networkId] and
-                                self.menu.antigap[unit.charName]:get() and
-                                self:CastE(pred)
-                         then
-                            return
-                        end
-                        if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() and self:CastE(pred) then
-                            return
-                        end
-                    end
-                end
-
-                if ComboMode then
-                    local target = e_targets[1]
-                    if target then
-                        local pred = e_preds[target.networkId]
-
-                        if
-                            not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and
-                                self:CastE(pred)
-                         then
-                            return
-                        end
-                    end
-                end
-            end
-
-            if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and ComboMode then
-                local w_target, w_pred = self.TS:GetTarget(self.w, myHero, InComboRangeCallback)
-                if w_target and w_pred and self:CastW(w_pred) then
+        -- Will waste pred calls without these conditions as well as call Cast when can't cast
+        if not qActive and self:ShouldCast() then
+            if rActive then
+                if self:CastTrinket() or self:CastR() then
                     return
+                end
+            else
+                self.r.lastTarget = nil
+                self.r.mode = nil
+
+                if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
+                    local e_targets, e_preds =
+                        self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
+
+                    for i = 1, #e_targets do
+                        local unit = e_targets[i]
+                        local pred = e_preds[unit.networkId]
+                        if pred then
+                            if pred.targetDashing and self:CastE(pred) then
+                                return
+                            end
+                            if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() and self:CastE(pred) then
+                                return
+                            end
+                        end
+                    end
+
+                    if ComboMode then
+                        local target = e_targets[1]
+                        if target then
+                            local pred = e_preds[target.networkId]
+
+                            if
+                                not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and
+                                    self:CastE(pred)
+                             then
+                                return
+                            end
+                        end
+                    end
+                end
+
+                if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and ComboMode then
+                    local w_target, w_pred = self.TS:GetTarget(self.w, myHero, InComboRangeCallback)
+                    if w_target and w_pred and self:CastW(w_pred) then
+                        return
+                    end
                 end
             end
         end
-    end
 
-    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and (ComboMode or HarassMode) then
-        self.q.range = self.q.max
+        if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and (ComboMode or HarassMode) then
+            self.q.range = self.q.max
 
-        local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
+            local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
 
-        if q_target and q_pred and self:CastQ(q_pred, q_target) then
-            return
+            if q_target and q_pred and self:CastQ(q_pred, q_target) then
+                return
+            end
         end
     end
 end

@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 2.31
+local version = 2.4
 if tonumber(GetInternalWebResult("asdfezreal.version")) > version then
     DownloadInternalFile("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua")
     PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfezreal.version")) .. " Press F5")
@@ -10,25 +10,23 @@ local DreamTS = require("DreamTS")
 local dmgLib = require("FF15DamageLib")
 local Orbwalker = require "FF15OL"
 
-local Vector = require("GeometryLib").Vector
-local LineSegment = require("GeometryLib").LineSegment
-
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
-    if not _G.AuroraOrb and not _G.LegitOrbwalker then
-        LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
-    end
-    Orbwalker:Setup()
 end
 
 function Ezreal:__init()
+    self.turrets = {}
+    for i, turret in pairs(ObjectManager:GetEnemyTurrets()) do
+        self.turrets[turret.networkId] = {object = turret, range = 775 + 25}
+    end
+    self.orbSetup = false
     self.q = {
         type = "linear",
         speed = 2000,
         range = 1150,
-        delay = 0.25,
+        delay = 0.28,
         width = 125,
         collision = {
             ["Wall"] = true,
@@ -100,9 +98,21 @@ function Ezreal:__init()
         end
     )
     AddEvent(
+        Events.OnProcessSpell,
+        function(...)
+            self:OnProcessSpell(...)
+        end
+    )
+    AddEvent(
         Events.OnExecuteCastFrame,
         function(...)
             self:OnExecuteCastFrame(...)
+        end
+    )
+    AddEvent(
+        Events.OnDeleteObject,
+        function(obj)
+            self:OnDeleteObject(obj)
         end
     )
     PrintChat("Ezreal loaded")
@@ -158,16 +168,23 @@ end
 function Ezreal:GetCastPosition(pred)
     pred:draw()
     if pred.isAdjusted then
-        PrintChat("adjusted")
         return pred.ap
     else
-        PrintChat("regular")
         return pred.castPosition
     end
 end
 
 function Ezreal:CastQ()
     if myHero.spellbook:CanUseSpell(0) == 0 then
+        for i, turret in pairs(self.turrets) do
+            local turretObj = turret.object
+            if
+                turretObj and turretObj.isValid and turretObj.health > 0 and
+                    GetDistanceSqr(turretObj) <= turret.range * turret.range
+             then
+                return
+            end
+        end
         local qTargets, qPred =
             self:GetTarget(
             self.q,
@@ -193,7 +210,11 @@ function Ezreal:CastQ()
 end
 
 function Ezreal:OnTick()
-    if not Orbwalker:IsAttacking() then
+    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
+        Orbwalker:Setup()
+        self.orbSetup = true
+    end
+    if self.orbSetup and not Orbwalker:IsAttacking() then
         if self.menu.r:get() and myHero.spellbook:CanUseSpell(3) == 0 then
             local rTarget, rPred = self:GetTarget(self.r)
             if rTarget and rPred and rPred.rates["very slow"] then
@@ -268,6 +289,20 @@ function Ezreal:GetTarget(spell, all, targetFilter, predFilter)
     end
 end
 
+function Ezreal:OnProcessSpell(obj, spell)
+    if obj == myHero then
+        if spell.spellData.name == "EzrealQ" then
+            self.LastCasts.Q = os.clock()
+        elseif spell.spellData.name == "EzrealW" then
+            self.LastCasts.W = os.clock()
+        elseif spell.spellData.name == "EzrealE" then
+            self.LastCasts.E = os.clock()
+        elseif spell.spellData.name == "EzrealR" then
+            self.LastCasts.R = os.clock()
+        end
+    end
+end
+
 function Ezreal:OnExecuteCastFrame(obj, spell)
     if obj == myHero then
         if spell.spellData.name == "EzrealQ" then
@@ -279,6 +314,12 @@ function Ezreal:OnExecuteCastFrame(obj, spell)
         elseif spell.spellData.name == "EzrealR" then
             self.LastCasts.R = nil
         end
+    end
+end
+
+function Ezreal:OnDeleteObject(obj)
+    if self.turrets[obj.networkId] then
+        self.turrets[obj.networkId] = nil
     end
 end
 
