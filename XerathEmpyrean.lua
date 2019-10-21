@@ -2,23 +2,111 @@ if myHero.charName ~= "Xerath" then
     return
 end
 
-local Xerath = {}
-local version = 3.4
+local CastModeOptions = {"slow", "very slow"}
 
-if tonumber(GetInternalWebResult("XerathEmpyrean.version")) > version then
-    DownloadInternalFile("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("XerathEmpyrean.version")) .. " Press F5")
+local Xerath = {}
+local version = 3.5
+
+
+GetInternalWebResultAsync("XerathEmpyrean.version", function(v)
+    if tonumber(v) > version then
+        DownloadInternalFileAsync("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua", function (success) 
+            if success then
+                PrintChat("Updated. Press F5")
+            end
+        end
+    )
+    end
 end
+)
+
+
 
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
 local Orbwalker = require("FF15OL")
 local Vector = require("GeometryLib").Vector
+local LineSegment = require("GeometryLib").LineSegment
+
+local drawPos = {}
+
+local function EdgePosition2(tP, cP, source, adjustment, target, range)
+    tP = Vector(tP)
+    cP = Vector(cP)
+
+    local dist = GetDistance(source:D3D(), tP:D3D())
+    local angle = math.asin(adjustment / dist)
+    local diff = tP - source
+    local rotated1 = diff:rotated(0, angle, 0):normalized()
+    local rotated2 = diff:rotated(0, -angle, 0):normalized()
+    local distToCast = math.sqrt(dist * dist - adjustment * adjustment)
+    local castPos1 = (source + rotated1 * distToCast)
+    local castPos2 = (source + rotated2 * distToCast)
+    local maxDist = GetDistance(tP:D3D(), target.position)
+    print(maxDist)
+    local targetVec = Vector(target.position)
+    local res, maxPos
+    if GetDistanceSqr(castPos1:D3D(), target.position) < GetDistanceSqr(castPos2:D3D(), target.position) then
+        res = castPos1
+        maxPos = targetVec + (targetVec - source):rotated(0, -math.pi / 2, 0):normalized() * maxDist
+    else
+        res = castPos2
+        maxPos = targetVec + (targetVec - source):rotated(0, math.pi / 2, 0):normalized() * maxDist
+    end
+    local diffCast = (tP - res):normalized() * (adjustment - target.boundingRadius)
+    drawPos = {}
+    drawPos.pos1 = tP:D3D()
+    drawPos.pos2 = res:D3D()
+    drawPos.pos3 = source:D3D()
+    drawPos.pos4 = target.position
+    drawPos.pos11 = targetVec:D3D()
+    drawPos.pos12 = maxPos:D3D()
+
+    local startPos = source + diffCast
+    local endPosShort = res + diffCast
+    local endPos = startPos + (endPosShort - startPos):normalized() * range
+    --[[ drawPos.pos31 = (source - diffCast):D3D()
+    drawPos.pos32 = (res - diffCast):D3D() ]]
+    drawPos.pos21 = startPos:D3D()
+    drawPos.pos22 = endPos:D3D()
+    local seg1 = LineSegment(targetVec, maxPos)
+    local seg2 = LineSegment(startPos, endPos)
+    local _, intersection1 = seg1:intersects(seg2)
+    if intersection1 then
+        --[[ local seg3 = LineSegment(source - diffCast, res - diffCast)
+        local _, intersection2 = seg1:intersects(seg3)
+        if intersection2 then
+            print("hey2")
+            local interVec2 = Vector(intersection2.x, myHero.position.y, intersection2.z)
+            local a = GetDistanceSqr(target.position, interVec2:D3D())
+            local b = GetDistanceSqr(maxPos:D3D(), interVec1:D3D())
+            print("a: " .. a .. " b: " .. b)
+            if a > b then
+                return res:D3D(), true
+            else
+                return cP:D3D(), false
+            end
+        else
+            return cP:D3D(), false
+        end ]]
+        print("hey1")
+        local interVec1 = Vector(intersection1.x, myHero.position.y, intersection1.z)
+        if GetDistance(interVec1:D3D(), target.position) > maxDist / 2 then
+            return res:D3D(), true
+        else
+            return cP:D3D(), false
+        end
+    else
+        return cP:D3D(), false
+    end
+    return cP:D3D(), false
+end
 
 function OnLoad()
     if not _G.Prediction then
         _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
+        _G.EdgePosition = EdgePosition2
     end
 
     if not _G.AuroraOrb and not _G.LegitOrbwalker then
@@ -30,7 +118,6 @@ function OnLoad()
 end
 
 function Xerath:__init()
-    self.orbSetup = false
     self.q = {
         type = "linear",
         last = nil,
@@ -136,8 +223,21 @@ function Xerath:Menu()
     self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean")
 
     self.menu:sub("dreamTs", "Target Selector")
+    self.menu:sub("antigap", "Anti Gapclose")
+    self.antiGapHeros = {}
+    for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+        self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
+        self.antiGapHeros[enemy.networkId] = true
+    end
     self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt)
+
+    self.menu:sub("spells", "Spell cast rates")
+    self.menu.spells:list("q", "Q", 2, CastModeOptions)
+    self.menu.spells:list("w", "W", 2, CastModeOptions)
+    self.menu.spells:list("e", "E", 2, CastModeOptions)
+    self.menu.spells:list("r", "R", 2, CastModeOptions)
+
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Tap Key", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
@@ -170,6 +270,10 @@ function Xerath:ShouldCast()
     return true
 end
 
+function Xerath:GetCastRate(spell)
+    return CastModeOptions[self.menu.spells[spell].value]
+end
+
 function Xerath:OnDraw()
     local isQActive, remainingTime = self:IsQActive()
     local range = self.q.max
@@ -193,19 +297,32 @@ function Xerath:OnDraw()
         end
         DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
     end
+
+    if drawPos.pos11 then
+        DrawHandler:Circle3D(drawPos.pos1, 30, Color.Red)
+        DrawHandler:Circle3D(drawPos.pos2, 30, Color.Blue)
+        DrawHandler:Circle3D(drawPos.pos3, 30, Color.White)
+        DrawHandler:Circle3D(drawPos.pos4, 30, Color.Yellow)
+        DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos1), Renderer:WorldToScreen(drawPos.pos4), Color.White)
+
+        DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos11), Renderer:WorldToScreen(drawPos.pos12), Color.Red)
+        DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos21), Renderer:WorldToScreen(drawPos.pos22), Color.Blue)
+    --[[         DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos31), Renderer:WorldToScreen(drawPos.pos32), Color.Yellow)
+ ]]
+    end
 end
 
-function Xerath:CastQ(pred, target)
+function Xerath:CastQ(pred)
     local isQActive, remainingTime = self:IsQActive()
     if isQActive then
-        return self:CastQ2(pred, isQActive and self:GetQRange(remainingTime) or self.q.max, target, remainingTime)
+        return self:CastQ2(pred, isQActive and self:GetQRange(remainingTime) or self.q.max, remainingTime)
     elseif
         pred.rates["instant"] and GetDistanceSqr(pred.castPosition) > self.q.min * self.q.min or
-            pred.rates["very slow"] and GetDistanceSqr(pred.castPosition) <= self.q.min * self.q.min
+            pred.rates[self:GetCastRate("q")] and GetDistanceSqr(pred.castPosition) <= self.q.min * self.q.min
      then
         myHero.spellbook:CastSpell(0, pred.castPosition)
         self.LastCasts.Q1 = RiotClock.time
-        self:CastQ2(pred, self.q.min, target)
+        self:CastQ2(pred, self.q.min)
         return true
     end
 end
@@ -215,47 +332,21 @@ function Vector2D(pos)
 end
 
 function Xerath:EdgePosition(pred, target)
-    if not pred.isMoving or pred.targetDashing then
-        return pred.castPosition
-    end
-    local targetPos = _G.Prediction.GetUnitPosition(target, 0.06 + NetClient.ping / 1000 + self.q.delay)
-    local targetVec = Vector(targetPos)
-    local width = self.q.width / 2 + target.boundingRadius
-    local dist = GetDistance(targetPos)
-    local angle = math.asin(width / dist)
-    local myHeroVec = _G.Prediction.GetUnitPosition(myHero, 0.06 + NetClient.ping / 2000)
-    local diff = targetVec - myHeroVec
-    local rotated1 = diff:rotated(0, angle, 0)
-    local rotated2 = diff:rotated(0, -angle, 0)
-    local distToCast = math.sqrt(dist * dist - width * width)
-    local castPos1 = (myHeroVec + rotated1:normalized() * distToCast):toDX3()
-    local castPos2 = (myHeroVec + rotated2:normalized() * distToCast):toDX3()
-    local res = GetDistance(castPos1, targetPos) < GetDistance(castPos2, targetPos) and castPos1 or castPos2
-    local maxPos = myHeroVec + (Vector(res) - myHeroVec):normalized() * (self.q.max + 100)
-    local seg1 = LineSegment(myHeroVec, maxPos)
-    local seg2 = LineSegment(Vector(target.position), targetVec)
-    local _, intersection = seg1:intersects(seg2)
-    if intersection then
-        local intersectionVector = Vector(intersection.x, myHero.position.y, intersection.z)
-        local intersectionAngle = intersectionVector:angleBetween(myHeroVec, targetVec)
-        PrintChat(intersectionAngle)
-        if intersectionAngle > 45 and intersectionAngle < 135 then
-            PrintChat("adjusted")
-            return res
-        else
-            return pred.castPosition
-        end
+    if pred.isAdjusted then
+        PrintChat("adjusted")
+        return pred.ap
     else
+        PrintChat("regular")
         return pred.castPosition
     end
 end
 
-function Xerath:CastQ2(pred, range, target, remainingTime)
+function Xerath:CastQ2(pred, range, remainingTime)
     local dist = GetDistanceSqr(pred.castPosition)
     local forceCast = (remainingTime and remainingTime < .1 and pred.rates["instant"])
     local rangeAdjust = range - 100
 
-    if pred.rates["very slow"] or forceCast then
+    if pred.rates[self:GetCastRate("q")] or forceCast then
         if forceCast or (pred.isMoving and not pred.targetDashing) then
             if dist > rangeAdjust * rangeAdjust then
                 return
@@ -265,7 +356,7 @@ function Xerath:CastQ2(pred, range, target, remainingTime)
                 return
             end
         end
-        myHero.spellbook:UpdateChargeableSpell(0, self:EdgePosition(pred, target), true)
+        myHero.spellbook:UpdateChargeableSpell(0, self:EdgePosition(pred), true)
 
         pred.drawRange = range -- So debug draw shows it at the correct range rather than always self.q.max
         pred:draw()
@@ -276,7 +367,7 @@ function Xerath:CastQ2(pred, range, target, remainingTime)
 end
 
 function Xerath:CastW(pred)
-    if pred.rates["very slow"] then
+    if pred.rates[self:GetCastRate("w")] then
         myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
         self.LastCasts.W = RiotClock.time
         pred:draw()
@@ -285,7 +376,7 @@ function Xerath:CastW(pred)
 end
 
 function Xerath:CastE(pred)
-    if pred.rates["very slow"] then
+    if pred.rates[self:GetCastRate("e")] then
         myHero.spellbook:CastSpell(2, pred.castPosition)
         self.LastCasts.E = RiotClock.time
         pred:draw()
@@ -328,7 +419,7 @@ function Xerath:CastR()
         end
 
         if mouseTarget and mousePred then
-            if mousePred.rates["very slow"] then
+            if mousePred.rates[self:GetCastRate("r")] then
                 myHero.spellbook:CastSpell(3, mousePred.castPosition)
                 self.LastCasts.R = RiotClock.time
                 self.r.lastTarget = mouseTarget
@@ -337,7 +428,7 @@ function Xerath:CastR()
                 return true
             end
         elseif (not self.r.mode) and allTarget and allPred then
-            if allPred.rates["very slow"] then
+            if allPred.rates[self:GetCastRate("r")] then
                 myHero.spellbook:CastSpell(3, allPred.castPosition)
                 self.LastCasts.R = RiotClock.time
                 self.r.lastTarget = allTarget
@@ -359,83 +450,82 @@ local function InComboRangeCallback(unit)
 end
 
 function Xerath:OnTick()
-    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
-        Orbwalker:Setup()
-        self.orbSetup = true
-    end
     if myHero.dead then
         return
     end
-    if self.orbSetup then
-        local qActive = self:IsQActive()
-        local rActive = self:IsRActive()
 
-        for i, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
-            UnitsInRange[enemy.index] = InComboRange(enemy)
-        end
+    local qActive = self:IsQActive()
+    local rActive = self:IsRActive()
 
-        local ComboMode = Orbwalker:GetMode() == "Combo"
-        local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
+    for i, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+        UnitsInRange[enemy.index] = InComboRange(enemy)
+    end
 
-        -- Will waste pred calls without these conditions as well as call Cast when can't cast
-        if not qActive and self:ShouldCast() then
-            if rActive then
-                if self:CastTrinket() or self:CastR() then
-                    return
-                end
-            else
-                self.r.lastTarget = nil
-                self.r.mode = nil
+    local ComboMode = Orbwalker:GetMode() == "Combo"
+    local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
 
-                if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
-                    local e_targets, e_preds =
-                        self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
-
-                    for i = 1, #e_targets do
-                        local unit = e_targets[i]
-                        local pred = e_preds[unit.networkId]
-                        if pred then
-                            if pred.targetDashing and self:CastE(pred) then
-                                return
-                            end
-                            if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() and self:CastE(pred) then
-                                return
-                            end
-                        end
-                    end
-
-                    if ComboMode then
-                        local target = e_targets[1]
-                        if target then
-                            local pred = e_preds[target.networkId]
-
-                            if
-                                not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and
-                                    self:CastE(pred)
-                             then
-                                return
-                            end
-                        end
-                    end
-                end
-
-                if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and ComboMode then
-                    local w_target, w_pred = self.TS:GetTarget(self.w, myHero, InComboRangeCallback)
-                    if w_target and w_pred and self:CastW(w_pred) then
-                        return
-                    end
-                end
-            end
-        end
-
-        if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and (ComboMode or HarassMode) then
-            self.q.range = self.q.max
-
-            local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
-
-            if q_target and q_pred and self:CastQ(q_pred, q_target) then
+    -- Will waste pred calls without these conditions as well as call Cast when can't cast
+    if not qActive and self:ShouldCast() then
+        if rActive then
+            if self:CastTrinket() or self:CastR() then
                 return
             end
+        else
+            self.r.lastTarget = nil
+            self.r.mode = nil
+
+            if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
+                local e_targets, e_preds =
+                    self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
+
+                for i = 1, #e_targets do
+                    local unit = e_targets[i]
+                    local pred = e_preds[unit.networkId]
+                    if pred then
+                        if
+                            pred.targetDashing and self.antiGapHeros[unit.networkId] and
+                                self.menu.antigap[unit.charName]:get() and
+                                self:CastE(pred)
+                         then
+                            return
+                        end
+                        if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() and self:CastE(pred) then
+                            return
+                        end
+                    end
+                end
+
+                if ComboMode then
+                    local target = e_targets[1]
+                    if target then
+                        local pred = e_preds[target.networkId]
+
+                        if
+                            not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and
+                                self:CastE(pred)
+                         then
+                            return
+                        end
+                    end
+                end
+            end
+
+            if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and ComboMode then
+                local w_target, w_pred = self.TS:GetTarget(self.w, myHero, InComboRangeCallback)
+                if w_target and w_pred and self:CastW(w_pred) then
+                    return
+                end
+            end
+        end
+    end
+
+    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and (ComboMode or HarassMode) then
+        self.q.range = self.q.max
+
+        local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
+
+        if q_target and q_pred and self:CastQ(q_pred) then
+            return
         end
     end
 end

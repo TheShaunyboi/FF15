@@ -1,14 +1,6 @@
---[[
-TO DO:
-Add QE/WE Long Wall Check
-Fix Spell not casting bug
-]]
 local Syndra = {}
-local version = 3.0
-if tonumber(GetInternalWebResult("SyndraEmpyrean.version")) > version then
-    DownloadInternalFile("SyndraEmpyrean.lua", SCRIPT_PATH .. "SyndraEmpyrean.lua")
-    print("New version:" .. tonumber(GetInternalWebResult("SyndraEmpyrean.version")) .. " Press F5")
-end
+local version = 3.02
+
 require "FF15Menu"
 require "utils"
 
@@ -86,7 +78,7 @@ function Syndra:init()
             type = "linear",
             pingPongSpeed = 2000,
             range = 1250,
-            delay = 0.25,
+            delay = 0.27,
             speed = 2000,
             width = 200,
             collision = {
@@ -228,6 +220,10 @@ function Syndra:Menu()
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("qe2", "Use Long Stun", true, byte("Z"))
     self.menu:checkbox("e", "AutoE", true, byte("T"))
+    self.menu:sub("antigap", "Anti-Gapcloser")
+    for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
+        self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
+    end
     --[[   self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt) ]]
     self.menu:sub("r", "R")
@@ -346,7 +342,7 @@ function Syndra:Combo()
         )
         if weTarget and wePred then
             canE = true
-            if wePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or wePred.targetDashing) then
+            if wePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or (wePred.targetDashing and self.menu.antigap[weTarget.charName]:get())) then
                 if self:CastWEShort(wePred, canHitOrbs) then
                     self.spell.w.blacklist2 = {target = weTarget.networkId, time = clock()}
                     return true
@@ -368,7 +364,7 @@ function Syndra:Combo()
         )
         if qeTarget and qePred then
             canE = true
-            if qePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or qePred.targetDashing) then
+            if qePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or (qePred.targetDashing and self.menu.antigap[qeTarget.charName]:get())) then
                 if self:CastQEShort(qePred, qeTarget, canHitOrbs) then
                     self.spell.w.blacklist2 = {target = qeTarget.networkId, time = clock()}
                     return true
@@ -394,7 +390,7 @@ function Syndra:Combo()
     end
     self.rDamages = {}
     self.spell.r.castRange = 675 + (myHero.spellbook:Spell(SpellSlot.R).level / 3) * 75
-
+    self:CalcRDamage()
     local rTargets = self:GetTargetRange(1500, true)
     for _, target in pairs(rTargets) do
         if self:CastR(target) then
@@ -438,10 +434,10 @@ function Syndra:Combo()
             )
             if
                 eTarget and ePred and ePred.rates["slow"] and
-                    (GetDistanceSqr(ePred.castPosition) <= self.spell.q.rangeSqr or self.menu.qe2:get())
+                    (GetDistanceSqr(ePred.castPosition) <= self.spell.e.rangeSqr or self.menu.qe2:get())
              then
                 if (w and self:CastWELong(ePred, eTarget, canHitOrbs)) or (q and self:CastQELong(ePred, canHitOrbs)) then
-                    PrintChat("e long")
+                    --PrintChat("e long")
                     return
                 end
             end
@@ -565,7 +561,7 @@ function Syndra:CastQ(pred)
                 isCasted = false,
                 endT = clock() + 0.25
             }
-            PrintChat("q")
+            --PrintChat("q")
             return true
         end
     end
@@ -612,7 +608,7 @@ function Syndra:CastW1()
     if target then
         myHero.spellbook:CastSpell(SpellSlot.W, target.position)
         self.last.w = clock() + 0.5
-        PrintChat("w1" .. target.name .. GetDistance(target.position))
+        --PrintChat("w1" .. target.name .. GetDistance(target.position))
         return true
     end
 end
@@ -628,7 +624,7 @@ function Syndra:CastW2(pred)
         myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
         self.last.w = clock() + 0.5
         pred:draw()
-        PrintChat("w2")
+        --PrintChat("w2")
         return true
     end
 end
@@ -650,7 +646,7 @@ function Syndra:CastShortEMode(mode, canHitOrbs)
     if eTarget and ePred and ePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or pred.targetDashing) then
         if mode == "q" and self:CastQEShort(ePred, eTarget, canHitOrbs) or self:CastWEShort(ePred, canHitOrbs) then
             self.spell.w.blacklist2 = {target = eTarget.networkId, time = clock()}
-            PrintChat("e short")
+            --PrintChat("e short")
             return true
         end
     end
@@ -853,7 +849,7 @@ function Syndra:CalcBestCastAngle(colls, all)
         if res > 360 then
             res = res - 360
         end
-        PrintChat("count: " .. maxCount .. " res: " .. res)
+        --PrintChat("count: " .. maxCount .. " res: " .. res)
         return rad(res)
     end
 end
@@ -929,7 +925,7 @@ function Syndra:CastE(target, canHitOrbs)
                         self.spell.e.range):toDX3()
                 myHero.spellbook:CastSpell(SpellSlot.E, castPosition)
                 self.last.e = clock() + 0.5
-                PrintChat("e")
+                --PrintChat("e")
                 return true
             end
         end
@@ -1053,7 +1049,7 @@ function Syndra:CastWELong(pred, castTarget, canHitOrbs)
             self.last.w = clock() + 0.5
             self.last.e = clock() + 0.5
             self:CheckHitOrb(castPosition)
-            PrintChat("we")
+            --PrintChat("we")
             pred:draw()
             return true
         end
@@ -1110,7 +1106,7 @@ function Syndra:CastWEShort(pred, canHitOrbs)
             myHero.spellbook:CastSpell(SpellSlot.E, castPosition)
             self.last.w = clock() + 0.5
             self.last.e = clock() + 0.5
-            PrintChat("we")
+            --PrintChat("we")
             pred:draw()
             return true
         end
@@ -1139,9 +1135,20 @@ function Syndra:UseIgnite(target)
     end
 end
 
+function Syndra:CalcRDamage()
+    local validOrbs = 0
+    for i = 1, #self.orbs do 
+        local orb = self.orbs[i]
+        if orb and orb.isInitialized then
+            validOrbs = validOrbs + 1
+        end
+    end
+    local count = min(7, 3 + validOrbs)
+    self.spell.r.baseDamage = count * (50 + 45 * myHero.spellbook:Spell(SpellSlot.R).level + 0.2 * self:GetTotalAp())
+end
+
 function Syndra:RExecutes(target)
-    local count = min(7, 3 + #self.orbs)
-    local base = count * (50 + 45 * myHero.spellbook:Spell(SpellSlot.R).level + 0.2 * self:GetTotalAp())
+    local base = self.spell.r.baseDamage
     local buffs = myHero.buffManager.buffs
     for i = 1, #buffs do
         local buff = buffs[i]
@@ -1243,7 +1250,7 @@ function Syndra:CastR(target)
         end
         myHero.spellbook:CastSpell(SpellSlot.R, target.networkId)
         self.last.r = clock() + 0.5
-        PrintChat("r")
+        --PrintChat("r")
         return true
     end
 end
@@ -1327,7 +1334,7 @@ function Syndra:OnCreateObj(obj)
                     end
                     if self.spell.w.blacklist2 and enemy.networkId == self.spell.w.blacklist2.target then
                         self.spell.w.blacklist2 = nil
-                        PrintChat("e detected")
+                        --PrintChat("e detected")
                     end
                 end
             end

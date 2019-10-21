@@ -1,9 +1,16 @@
 local Kaisa = {}
-local version = 1.6
-if tonumber(GetInternalWebResult("asdfkaisa.version")) > version then
-    DownloadInternalFile("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua")
-    PrintChat("New version:" .. tonumber(GetInternalWebResult("asdfkaisa.version")) .. " Press F5")
+local version = 1.7
+GetInternalWebResultAsync("asdfkaisa.version", function(v)
+    if tonumber(v) > version then
+        DownloadInternalFileAsync("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua", function (success) 
+            if success then
+                PrintChat("Updated. Press F5")
+            end
+        end
+    )
+    end
 end
+)
 require "FF15Menu"
 require "utils"
 local Orbwalker = require "FF15OL"
