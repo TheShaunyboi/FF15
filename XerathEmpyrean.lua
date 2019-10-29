@@ -5,12 +5,12 @@ end
 local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
-local version = 3.5
+local version = 3.6
 
 
 GetInternalWebResultAsync("XerathEmpyrean.version", function(v)
     if tonumber(v) > version then
-        DownloadInternalFileAsync("XerathEmpyrean.lua", SCRIPT_PATH .. "XerathEmpyrean.lua", function (success) 
+        DownloadInternalFileAsync("XerathEmpyrean.lua", SCRIPT_PATH, function (success) 
             if success then
                 PrintChat("Updated. Press F5")
             end
@@ -20,104 +20,29 @@ GetInternalWebResultAsync("XerathEmpyrean.version", function(v)
 end
 )
 
-
-
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
 local Orbwalker = require("FF15OL")
-local Vector = require("GeometryLib").Vector
-local LineSegment = require("GeometryLib").LineSegment
-
-local drawPos = {}
-
-local function EdgePosition2(tP, cP, source, adjustment, target, range)
-    tP = Vector(tP)
-    cP = Vector(cP)
-
-    local dist = GetDistance(source:D3D(), tP:D3D())
-    local angle = math.asin(adjustment / dist)
-    local diff = tP - source
-    local rotated1 = diff:rotated(0, angle, 0):normalized()
-    local rotated2 = diff:rotated(0, -angle, 0):normalized()
-    local distToCast = math.sqrt(dist * dist - adjustment * adjustment)
-    local castPos1 = (source + rotated1 * distToCast)
-    local castPos2 = (source + rotated2 * distToCast)
-    local maxDist = GetDistance(tP:D3D(), target.position)
-    print(maxDist)
-    local targetVec = Vector(target.position)
-    local res, maxPos
-    if GetDistanceSqr(castPos1:D3D(), target.position) < GetDistanceSqr(castPos2:D3D(), target.position) then
-        res = castPos1
-        maxPos = targetVec + (targetVec - source):rotated(0, -math.pi / 2, 0):normalized() * maxDist
-    else
-        res = castPos2
-        maxPos = targetVec + (targetVec - source):rotated(0, math.pi / 2, 0):normalized() * maxDist
-    end
-    local diffCast = (tP - res):normalized() * (adjustment - target.boundingRadius)
-    drawPos = {}
-    drawPos.pos1 = tP:D3D()
-    drawPos.pos2 = res:D3D()
-    drawPos.pos3 = source:D3D()
-    drawPos.pos4 = target.position
-    drawPos.pos11 = targetVec:D3D()
-    drawPos.pos12 = maxPos:D3D()
-
-    local startPos = source + diffCast
-    local endPosShort = res + diffCast
-    local endPos = startPos + (endPosShort - startPos):normalized() * range
-    --[[ drawPos.pos31 = (source - diffCast):D3D()
-    drawPos.pos32 = (res - diffCast):D3D() ]]
-    drawPos.pos21 = startPos:D3D()
-    drawPos.pos22 = endPos:D3D()
-    local seg1 = LineSegment(targetVec, maxPos)
-    local seg2 = LineSegment(startPos, endPos)
-    local _, intersection1 = seg1:intersects(seg2)
-    if intersection1 then
-        --[[ local seg3 = LineSegment(source - diffCast, res - diffCast)
-        local _, intersection2 = seg1:intersects(seg3)
-        if intersection2 then
-            print("hey2")
-            local interVec2 = Vector(intersection2.x, myHero.position.y, intersection2.z)
-            local a = GetDistanceSqr(target.position, interVec2:D3D())
-            local b = GetDistanceSqr(maxPos:D3D(), interVec1:D3D())
-            print("a: " .. a .. " b: " .. b)
-            if a > b then
-                return res:D3D(), true
-            else
-                return cP:D3D(), false
-            end
-        else
-            return cP:D3D(), false
-        end ]]
-        print("hey1")
-        local interVec1 = Vector(intersection1.x, myHero.position.y, intersection1.z)
-        if GetDistance(interVec1:D3D(), target.position) > maxDist / 2 then
-            return res:D3D(), true
-        else
-            return cP:D3D(), false
-        end
-    else
-        return cP:D3D(), false
-    end
-    return cP:D3D(), false
-end
+local Vector
 
 function OnLoad()
     if not _G.Prediction then
         _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
-        _G.EdgePosition = EdgePosition2
     end
 
     if not _G.AuroraOrb and not _G.LegitOrbwalker then
         LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
     end
 
+    Vector = _G.Prediction.Vector
+
     Orbwalker:Setup()
     Xerath:__init()
 end
 
 function Xerath:__init()
+    self.active_buffs = {}
     self.q = {
         type = "linear",
         last = nil,
@@ -203,6 +128,7 @@ function Xerath:__init()
             self:OnProcessSpell(...)
         end
     )
+    --[[
     AddEvent(
         Events.OnBuffGain,
         function(...)
@@ -215,6 +141,7 @@ function Xerath:__init()
             self:OnBuffLost(...)
         end
     )
+    ]]
     PrintChat("Xerath loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
@@ -249,7 +176,8 @@ function Xerath:DrawMinimapCircle(pos3d, radius, color)
     local dir = pos3d:normalized()
 
     for angle = 0, 360, 15 do
-        local pos = TacticalMap:WorldToMinimap((pos3d + dir:RotatedAngle(angle) * radius):toDX3())
+        local r = (pos3d + dir:RotatedAngle(angle) * radius):toDX3()
+        local pos = TacticalMap:WorldToMinimap(r)
         if pos.x ~= 0 then
             pts[#pts + 1] = pos
         end
@@ -298,18 +226,6 @@ function Xerath:OnDraw()
         DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
     end
 
-    if drawPos.pos11 then
-        DrawHandler:Circle3D(drawPos.pos1, 30, Color.Red)
-        DrawHandler:Circle3D(drawPos.pos2, 30, Color.Blue)
-        DrawHandler:Circle3D(drawPos.pos3, 30, Color.White)
-        DrawHandler:Circle3D(drawPos.pos4, 30, Color.Yellow)
-        DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos1), Renderer:WorldToScreen(drawPos.pos4), Color.White)
-
-        DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos11), Renderer:WorldToScreen(drawPos.pos12), Color.Red)
-        DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos21), Renderer:WorldToScreen(drawPos.pos22), Color.Blue)
-    --[[         DrawHandler:Line(Renderer:WorldToScreen(drawPos.pos31), Renderer:WorldToScreen(drawPos.pos32), Color.Yellow)
- ]]
-    end
 end
 
 function Xerath:CastQ(pred)
@@ -334,11 +250,10 @@ end
 function Xerath:EdgePosition(pred, target)
     if pred.isAdjusted then
         PrintChat("adjusted")
-        return pred.ap
     else
         PrintChat("regular")
-        return pred.castPosition
     end
+    return pred.castPosition
 end
 
 function Xerath:CastQ2(pred, range, remainingTime)
@@ -449,10 +364,46 @@ local function InComboRangeCallback(unit)
     return UnitsInRange[unit.index]
 end
 
+function Xerath:TriggerBuffCallbacks()
+    local buffs = myHero.buffManager.buffs
+
+    local buffsThisTick = {}
+
+    for i = 1, #buffs do
+        ---@type BuffInstance
+        local buff = buffs[i]
+
+        if buff and buff.name and buff.name:find("Xerath") and buff.remainingTime > 0 then
+            buffsThisTick[buff.name] = buff
+        end
+    end
+
+    for buffName, buff in pairs(buffsThisTick) do
+        if not self.active_buffs[buffName] then
+            self.active_buffs[buffName] = true
+
+            self:OnBuffGain(myHero, buff)
+        end
+    end
+
+    for buffName, isBuffActive in pairs(self.active_buffs) do
+        if buffName == "XerathLocusOfPower2" then
+            --print(isBuffActive, buffsThisTick[buffName])
+        end
+        if isBuffActive and (not buffsThisTick[buffName] or buffsThisTick[buffName].remainingTime <= 0) then
+            self.active_buffs[buffName] = false
+
+            self:OnBuffLost(myHero, {name = buffName})
+        end
+    end
+end
+
 function Xerath:OnTick()
     if myHero.dead then
         return
     end
+
+    self:TriggerBuffCallbacks()
 
     local qActive = self:IsQActive()
     local rActive = self:IsRActive()
@@ -501,7 +452,7 @@ function Xerath:OnTick()
                         local pred = e_preds[target.networkId]
 
                         if
-                            not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and
+                            pred and not pred:minionCollision() and not pred:heroCollision() and not pred:windWallCollision() and
                                 self:CastE(pred)
                          then
                             return
@@ -536,13 +487,13 @@ function Xerath:OnBuffGain(unit, buff)
     if unit.networkId == myHero.networkId then
         local time = RiotClock.time
 
-        if buff.type == BuffType.Aura and buff.name == "XerathArcanopulseChargeUp" then
+        if buff.name == "XerathArcanopulseChargeUp" then
             Orbwalker:BlockAttack(true)
 
             self.QTracker.StartT = time
             self.QTracker.EndT = time + buff.remainingTime
             self.QTracker.Active = true
-        elseif buff.type == BuffType.CombatEnchancer and buff.name == "XerathLocusOfPower2" then
+        elseif buff.name == "XerathLocusOfPower2" then
             Orbwalker:BlockAttack(true)
             Orbwalker:BlockMove(true)
 
@@ -560,7 +511,7 @@ function Xerath:OnBuffLost(unit, buff)
         if buff.name == "XerathArcanopulseChargeUp" then
             Orbwalker:BlockAttack(false)
 
-            self.QTracker.Active = falses
+            self.QTracker.Active = false
         elseif buff.name == "XerathLocusOfPower2" then
             Orbwalker:BlockAttack(false)
             Orbwalker:BlockMove(false)
