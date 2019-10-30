@@ -1,10 +1,12 @@
+if myHero.charName ~= "Syndra" then return end
+
 local Syndra = {}
-local version = 3.02
+local version = 3.11
 
 require "FF15Menu"
 require "utils"
 
-local Vector = require("GeometryLib").Vector
+local Vector
 local LineSegment = require("GeometryLib").LineSegment
 local dmgLib = require("FF15DamageLib")
 local DreamTS = require("DreamTS")
@@ -23,10 +25,30 @@ local byte, match, floor, min, max, abs, rad, huge, clock, insert, remove =
     table.insert,
     table.remove
 
+local function GetDistanceSqr(p1, p2)
+    p2 = p2 or myHero
+    local dx = p1.x - p2.x
+    local dz = p1.z - p2.z
+    return dx*dx + dz*dz
+end
+    
+
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
+    Vector = _G.Prediction.Vector
+    
+    function Vector:angleBetweenFull(v1, v2)
+        local p1, p2 = (-self + v1), (-self + v2)
+        local theta = p1:polar() - p2:polar()
+        if theta < 0 then
+            theta = theta + 360
+        end
+        return theta
+    end
+
+    Syndra:init()
 end
 
 function Syndra:init()
@@ -243,7 +265,7 @@ end
 
 function Syndra:GetCastPosition(pred)
     if pred.isAdjusted then
-        return pred.ap, true
+        return pred.castPosition, true
     else
         return pred.castPosition, false
     end
@@ -779,14 +801,7 @@ function Syndra:CalcQEShort(target, widthMax, spell)
     return pred
 end
 
-function Vector:angleBetweenFull(v1, v2)
-    local p1, p2 = (-self + v1), (-self + v2)
-    local theta = p1:polar() - p2:polar()
-    if theta < 0 then
-        theta = theta + 360
-    end
-    return theta
-end
+
 
 function Syndra:CalcBestCastAngle(colls, all)
     local maxCount = 0
@@ -860,7 +875,7 @@ function Syndra:CastE(target, canHitOrbs)
         if not checkPred then
             return
         end
-        collOrbs, maxHit, maxOrb = {}, 0, nil
+        local collOrbs, maxHit, maxOrb = {}, 0, nil
         --check which orb can be hit
         local checkWidth = checkPred.realHitChance == 1 and self.spell.e.widthMax or 100
         local checkSpell =
@@ -1457,6 +1472,3 @@ function Syndra:GetTotalAp()
         myHero.characterIntermediate.flatMagicDamageMod * (1 + myHero.characterIntermediate.percentMagicDamageMod)
 end
 
-if myHero.charName == "Syndra" then
-    Syndra:init()
-end
