@@ -1,15 +1,20 @@
 local Kaisa = {}
-local version = 1.7
-GetInternalWebResultAsync("asdfkaisa.version", function(v)
-    if tonumber(v) > version then
-        DownloadInternalFileAsync("asdfkaisa.lua", SCRIPT_PATH .. "asdfkaisa.lua", function (success) 
-            if success then
-                PrintChat("Updated. Press F5")
-            end
+local version = 1.82
+GetInternalWebResultAsync(
+    "asdfkaisa.version",
+    function(v)
+        if tonumber(v) > version then
+            DownloadInternalFileAsync(
+                "asdfkaisa.lua",
+                SCRIPT_PATH,
+                function(success)
+                    if success then
+                        PrintChat("Updated. Press F5")
+                    end
+                end
+            )
         end
-    )
     end
-end
 )
 require "FF15Menu"
 require "utils"
@@ -35,6 +40,10 @@ function Kaisa:__init()
             ["Hero"] = true,
             ["Minion"] = true
         }
+    }
+    self.LastCasts = {
+        Q = nil,
+        W = nil
     }
     self.turrets = {}
     for i, turret in pairs(ObjectManager:GetEnemyTurrets()) do
@@ -72,6 +81,18 @@ function Kaisa:__init()
             self:OnDeleteObject(obj)
         end
     )
+    AddEvent(
+        Events.OnProcessSpell,
+        function(...)
+            self:OnProcessSpell(...)
+        end
+    )
+    AddEvent(
+        Events.OnExecuteCastFrame,
+        function(...)
+            self:OnExecuteCastFrame(...)
+        end
+    )
     PrintChat("Kaisa loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
@@ -79,42 +100,17 @@ end
 function Kaisa:Menu()
     self.menu = Menu("asdfkaisa", "Kaisa")
     self.menu:checkbox("q", "AutoQ", true, 0x54)
-    self.menu:sub("drawQ", "Draw Q")
-    self.menu.drawQ:slider("q0r", "AutoQ off: Red", 1, 255, 150)
-    self.menu.drawQ:slider("q0g", "AutoQ off: Green", 1, 255, 150)
-    self.menu.drawQ:slider("q0b", "AutoQ off: Blue", 1, 255, 150)
-    self.menu.drawQ:slider("q1r", "AutoQ on: Red", 1, 255, 255)
-    self.menu.drawQ:slider("q1g", "AutoQ on: Green", 1, 255, 150)
-    self.menu.drawQ:slider("q1b", "AutoQ on: Blue", 1, 255, 150)
-    self.menu:sub("drawW", "Draw W")
-    self.menu.drawW:slider("wr", "W Near Mouse: Red", 1, 255, 150)
-    self.menu.drawW:slider("wg", "W Near Mouse: Green", 1, 255, 150)
-    self.menu.drawW:slider("wb", "W Near Mouse: Blue", 1, 255, 150)
 end
 
 function Kaisa:OnDraw()
-    local text = ""
-    if self.menu.q:get() then
-        DrawHandler:Circle3D(
-            myHero.position,
-            self.qRange,
-            self:Hex(255, self.menu.drawQ.q0r:get(), self.menu.drawQ.q0g:get(), self.menu.drawQ.q0b:get())
-        )
-        text = "AutoQ on"
-    else
-        DrawHandler:Circle3D(
-            myHero.position,
-            self.qRange,
-            self:Hex(255, self.menu.drawQ.q1r:get(), self.menu.drawQ.q1g:get(), self.menu.drawQ.q1b:get())
-        )
-        text = "AutoQ off"
-    end
-    DrawHandler:Circle3D(
-        pwHud.hudManager.virtualCursorPos,
-        self.w.searchRange,
-        self:Hex(255, self.menu.drawW.wr:get(), self.menu.drawW.wg:get(), self.menu.drawW.wb:get())
+    DrawHandler:Circle3D(myHero.position, self.qRange, Color.White)
+    DrawHandler:Circle3D(pwHud.hudManager.virtualCursorPos, self.w.searchRange, Color.White)
+    DrawHandler:Text(
+        DrawHandler.defaultFont,
+        Renderer:WorldToScreen(myHero.position),
+        true and "AutoQ on" or "AutoQ off",
+        Color.White
     )
-    DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
 
 function Kaisa:CastQ()
@@ -169,12 +165,21 @@ function Kaisa:CastW(target)
     end
 end
 
+function Kaisa:ShouldCast()
+    for spell, time in pairs(self.LastCasts) do
+        if time and RiotClock.time < time + 0.25 + NetClient.ping / 2000 + 0.06 then
+            return false
+        end
+    end
+    return true
+end
+
 function Kaisa:OnTick()
     if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
         Orbwalker:Setup()
         self.orbSetup = true
     end
-    if self.orbSetup then
+    if self.orbSetup and self:ShouldCast() then
         if self.menu.q:get() then
             self:CastQ()
         end
@@ -202,6 +207,22 @@ end
 function Kaisa:OnDeleteObject(obj)
     if self.turrets[obj.networkId] then
         self.turrets[obj.networkId] = nil
+    end
+end
+
+function Kaisa:OnProcessSpell(obj, spell)
+    if obj == myHero then
+        if spell.spellData.name == "KaisaQ" then
+            self.LastCasts.Q = nil
+        end
+    end
+end
+
+function Kaisa:OnExecuteCastFrame(obj, spell)
+    if obj == myHero then
+        if spell.spellData.name == "KaisaW" then
+            self.LastCasts.W = nil
+        end
     end
 end
 

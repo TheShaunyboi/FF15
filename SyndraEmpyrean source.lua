@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 3.02
+local version = 3.1
 
 require "FF15Menu"
 require "utils"
@@ -23,11 +23,16 @@ local byte, match, floor, min, max, abs, rad, huge, clock, insert, remove =
     table.insert,
     table.remove
 
+local paidUsers = {
+    asdf = true,
+    Etain = true
+}
+
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
-end
+end 
 
 function Syndra:init()
     self.orbSetup = false
@@ -211,7 +216,7 @@ function Syndra:init()
         end
     )
 
-    print("Syndra loaded")
+    PrintChat("Thank you for supporting Syndra - Empyrean")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
@@ -342,7 +347,11 @@ function Syndra:Combo()
         )
         if weTarget and wePred then
             canE = true
-            if wePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or (wePred.targetDashing and self.menu.antigap[weTarget.charName]:get())) then
+            if
+                wePred.rates["very slow"] and
+                    (Orbwalker:GetMode() == "Combo" or
+                        (wePred.targetDashing and self.menu.antigap[weTarget.charName]:get()))
+             then
                 if self:CastWEShort(wePred, canHitOrbs) then
                     self.spell.w.blacklist2 = {target = weTarget.networkId, time = clock()}
                     return true
@@ -364,7 +373,11 @@ function Syndra:Combo()
         )
         if qeTarget and qePred then
             canE = true
-            if qePred.rates["very slow"] and (Orbwalker:GetMode() == "Combo" or (qePred.targetDashing and self.menu.antigap[qeTarget.charName]:get())) then
+            if
+                qePred.rates["very slow"] and
+                    (Orbwalker:GetMode() == "Combo" or
+                        (qePred.targetDashing and self.menu.antigap[qeTarget.charName]:get()))
+             then
                 if self:CastQEShort(qePred, qeTarget, canHitOrbs) then
                     self.spell.w.blacklist2 = {target = qeTarget.networkId, time = clock()}
                     return true
@@ -1137,7 +1150,7 @@ end
 
 function Syndra:CalcRDamage()
     local validOrbs = 0
-    for i = 1, #self.orbs do 
+    for i = 1, #self.orbs do
         local orb = self.orbs[i]
         if orb and orb.isInitialized then
             validOrbs = validOrbs + 1
@@ -1334,7 +1347,7 @@ function Syndra:OnCreateObj(obj)
                     end
                     if self.spell.w.blacklist2 and enemy.networkId == self.spell.w.blacklist2.target then
                         self.spell.w.blacklist2 = nil
-                        --PrintChat("e detected")
+                    --PrintChat("e detected")
                     end
                 end
             end
@@ -1458,5 +1471,9 @@ function Syndra:GetTotalAp()
 end
 
 if myHero.charName == "Syndra" then
-    Syndra:init()
+    if paidUsers[GetUser()] then
+        Syndra:init()
+    else
+        PrintChat("No subscription found. Please purchase in order to use the script.")
+    end
 end

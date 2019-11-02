@@ -1,9 +1,9 @@
 local Ezreal = {}
-local version = 2.5
+local version = 2.51
 
 GetInternalWebResultAsync("asdfezreal.version", function(v)
     if tonumber(v) > version then
-        DownloadInternalFileAsync("asdfezreal.lua", SCRIPT_PATH .. "asdfezreal.lua", function (success) 
+        DownloadInternalFileAsync("asdfezreal.lua", SCRIPT_PATH, function (success) 
             if success then
                 PrintChat("Updated. Press F5")
             end
