@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 2.51
+local version = 2.61
 
 GetInternalWebResultAsync("asdfezreal.version", function(v)
     if tonumber(v) > version then
@@ -175,22 +175,20 @@ end
 
 function Ezreal:GetCastPosition(pred)
     pred:draw()
-    if pred.isAdjusted then
-        return pred.ap
-    else
-        return pred.castPosition
-    end
+    return pred.castPosition
 end
 
-function Ezreal:CastQ()
+function Ezreal:CastQ(isCombo)
     if myHero.spellbook:CanUseSpell(0) == 0 then
-        for i, turret in pairs(self.turrets) do
-            local turretObj = turret.object
-            if
-                turretObj and turretObj.isValid and turretObj.health > 0 and
-                    GetDistanceSqr(turretObj) <= turret.range * turret.range
-             then
-                return
+        if not isCombo then
+            for i, turret in pairs(self.turrets) do
+                local turretObj = turret.object
+                if
+                    turretObj and turretObj.isValid and turretObj.health > 0 and
+                        GetDistanceSqr(turretObj) <= turret.range * turret.range
+                then
+                    return
+                end
             end
         end
         local qTargets, qPred =
@@ -256,7 +254,7 @@ function Ezreal:OnTick()
                     return
                 end
             end
-            if self:CastQ() then
+            if self:CastQ(true) then
                 return
             end
         elseif self.menu.q:get() and not _G.Prediction.IsRecalling(myHero) then

@@ -1,5 +1,5 @@
 local Aphelios = {}
-local version = 2.2
+local version = 2.21
 
 GetInternalWebResultAsync(
     'asdfaphelios.version',
@@ -167,11 +167,12 @@ end
 
 function Aphelios:CalibrumAuto()
     if Orbwalker:CanAttack() and not Orbwalker:IsAttacking() then
-        local dist = myHero.characterIntermediate.attackRange + myHero.boundingRadius
+        local aaDist = myHero.characterIntermediate.attackRange + myHero.boundingRadius
         local target =
             self:GetTargetAuto(
             function(unit)
-                return GetDistanceSqr(unit, myHero) >= dist * dist and
+                local dist = GetDistanceSqr(unit, myHero)
+                return dist >= aaDist and dist <= 1800 * 1800 and
                     unit.buffManager:HasBuff('aphelioscalibrumbonusrangedebuff')
             end,
             false
@@ -296,7 +297,7 @@ function Aphelios:ShouldCrescendumQ()
         if res and (res.hits > 1 or res.hits == 1) and GetDistanceSqr(res.castPos) <= 450 * 450 then
             return true, res.castPos
         end
-    end
+    end 
 end
 
 function Aphelios:ShouldGravitumQ()
