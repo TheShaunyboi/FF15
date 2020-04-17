@@ -1,9 +1,14 @@
+--make the ms a function of time: offset, velocity, acceleration
+--use time as input for heap
+
 require "FF15Menu"
 require "utils"
 local Vector = require("GeometryLib").Vector
 local Circle = require("GeometryLib").Circle
 local LineSegment = require("GeometryLib").LineSegment
 local Polygon = require("GeometryLib").Polygon
+
+local sqrt2 = math.sqrt(2)
 
 local function Round(x)
     local remainder = x % 1
@@ -14,12 +19,23 @@ local function Round(x)
     end
 end
 
-local function DrawPolygon(vertices, color)
+local function DrawLines(vertices, color, complete)
     for i = 1, #vertices do
-        local startPos = Renderer:WorldToScreen(vertices[i]:toDX3())
-        local next = i == #vertices and 1 or i + 1
-        local endPos = Renderer:WorldToScreen(vertices[next]:toDX3())
-        DrawHandler:Line(startPos, endPos, color)
+        if i == #vertices then
+            if complete then
+                DrawHandler:Line(
+                    Renderer:WorldToScreen(vertices[i]:toDX3()),
+                    Renderer:WorldToScreen(vertices[1]:toDX3()),
+                    color
+                )
+            end
+        else
+            DrawHandler:Line(
+                Renderer:WorldToScreen(vertices[i]:toDX3()),
+                Renderer:WorldToScreen(vertices[i + 1]:toDX3()),
+                color
+            )
+        end
     end
 end
 
@@ -35,6 +51,123 @@ local function class()
             end
         }
     )
+end
+
+local HeapNode = class()
+
+function HeapNode:new(key, value)
+    self.key = key
+    self.value = value
+end
+
+function HeapNode.compare(a, b)
+    return a.key < b.key
+end
+
+local Heap = class()
+
+function Heap:new()
+    self.items = {}
+    self.dict = {}
+end
+
+function Heap:Insert(key, value)
+    if not self.dict[value] then
+        local node = HeapNode(key, value)
+        table.insert(self.items, node)
+        self.dict[value] = #self.items
+        self:BubbleUp(#self.items)
+    else
+        local idx = self.dict[value]
+        self.items[idx].key = key
+        if self:BubbleUp(idx) then
+        else
+            if self:BubbleDown(idx) then
+            end
+        end
+    end
+end
+
+function Heap:BubbleUp(idx)
+    local idx2 = math.floor(idx / 2)
+    if idx ~= 1 and self.items[idx2] and HeapNode.compare(self.items[idx], self.items[idx2]) then
+        self.dict[self.items[idx].value] = idx2
+        self.dict[self.items[idx2].value] = idx
+        local temp = self.items[idx2]
+        self.items[idx2] = self.items[idx]
+        self.items[idx] = temp
+        self:BubbleUp(idx2)
+
+        return true
+    end
+end
+
+function Heap:Remove()
+    local res = self.items[1]
+    self.dict[res.value] = nil
+    if #self.items == 1 then
+        table.remove(self.items, 1)
+    else
+        self.items[1] = self.items[#self.items]
+        self.dict[self.items[1].value] = 1
+        self.items[#self.items] = nil
+        self:BubbleDown(1)
+    end
+    return res.key, res.value
+end
+
+function Heap:BubbleDown(idx)
+    local nextIdx = 2 * idx
+    if self.items[nextIdx] then
+        nextIdx =
+            (self.items[nextIdx + 1] and HeapNode.compare(self.items[nextIdx + 1], self.items[nextIdx])) and nextIdx + 1 or
+            nextIdx
+        if HeapNode.compare(self.items[nextIdx], self.items[idx]) then
+            self.dict[self.items[idx].value] = nextIdx
+            self.dict[self.items[nextIdx].value] = idx
+            local temp = self.items[nextIdx]
+            self.items[nextIdx] = self.items[idx]
+            self.items[idx] = temp
+            self:BubbleDown(nextIdx)
+            return true
+        end
+    end
+end
+
+function Heap:IsEmpty()
+    return #self.items == 0
+end
+
+local NaiveHeap = class()
+
+function NaiveHeap:new()
+    self.dict = {}
+end
+
+function NaiveHeap:Insert(key, value)
+    self.dict[value] = key
+end
+
+function NaiveHeap:Remove(key, value)
+    local minKey = nil
+    local minValue = nil
+    for v, k in pairs(self.dict) do
+        if not minKey or minKey > k then
+            minKey = k
+            minValue = v
+        end
+    end
+    self.dict[minValue] = nil
+    return minKey, minValue
+end
+
+function NaiveHeap:IsEmpty()
+    for _, i in pairs(self.dict) do
+        if i then
+            return false
+        end
+    end
+    return true
 end
 
 local LinearSpell = class()
@@ -278,7 +411,7 @@ function LinearSpell:Draw()
     ) and
         Color.Red or
         Color.White
-    local cursorPos = pwHud.hudManager.virtualCursorPos
+   --[[  local cursorPos = pwHud.hudManager.virtualCursorPos
     local cursorPosAdjust = D3DXVECTOR3(cursorPos.x, myHero.position.y, cursorPos.z)
     DrawHandler:Line(Renderer:WorldToScreen(myHero.position), Renderer:WorldToScreen(cursorPosAdjust), color)
     local intersects =
@@ -291,46 +424,48 @@ function LinearSpell:Draw()
             self:TimeTillCollision(pos, myHero.boundingRadius),
             Color.White
         )
-    end
-    DrawPolygon(self:Vertices(), color)
-    DrawPolygon(self:Vertices(true, myHero.boundingRadius), color)
+    end ]]
+    DrawLines(self:Vertices(), color, true)
+    DrawLines(self:Vertices(true, myHero.boundingRadius), color, true)
 end
 
-local Graph = class()
+local Grid = class()
 
-function Graph:new(obj, interval, range)
+function Grid:new(obj, interval, range)
     self.obj = obj
     self:SetInterval(interval)
     self:SetRange(range)
     self.nodes = {}
 end
 
-function Graph:Fill()
+function Grid:Fill()
     self.nodes = {}
     local center = Vector(self.obj.position)
     for i = -self.iterations, self.iterations do
         if not self.nodes[i] then
             self.nodes[i] = {}
             for j = -self.iterations, self.iterations do
-                self.nodes[i][j] = center + Vector(i, 0, j) * self.interval
+                local pos = center + Vector(i, 0, j) * self.interval
+                self.nodes[i][j] = {}
+                table.insert(self.nodes[i][j], pos)
             end
         end
     end
 end
 
-function Graph:SetInterval(interval)
+function Grid:SetInterval(interval)
     self.interval = interval
 end
 
-function Graph:SetRange(range)
+function Grid:SetRange(range)
     self.iterations = math.floor(range / self.interval)
 end
 
-function Graph:GetRange()
+function Grid:GetRange()
     return self.iterations * self.interval
 end
 
-function Graph:Nearest(pos)
+function Grid:Nearest(pos)
     local diff = pos - Vector(self.obj.position)
     local maxRange = (self.iterations + 0.5) * self.interval
     if math.abs(diff.x) < maxRange and math.abs(diff.z) < maxRange then
@@ -338,54 +473,105 @@ function Graph:Nearest(pos)
     end
 end
 
-function Graph:GetEdges(i, j)
-    local iMin = i == -self.iterations and i or i - 1
-    local jMin = j == -self.iterations and j or j - 1
-    local iMax = i == self.iterations and i or i + 1
-    local jMax = j == self.iterations and j or j + 1
+function Grid:GetEdges(pos, validFunc)
     local res = {}
-    for x = iMin, iMax do
-        if not res[x] then
-            res[x] = {}
-        end
-        for y = jMin, jMax do
-            if x ~= i or y ~= j then
-                res[x][y] = 1
+    local i, j = self:Nearest(pos)
+    if i and j then
+        local startPos = self.nodes[i][j][1]
+        local isPlaced = pos ~= startPos
+        local iMin = i == -self.iterations and i or i - 1
+        local jMin = j == -self.iterations and j or j - 1
+        local iMax = i == self.iterations and i or i + 1
+        local jMax = j == self.iterations and j or j + 1
+        for x = iMin, iMax do
+            for y = jMin, jMax do
+                local diff = math.abs(x - i) + math.abs(y - j)
+                for idx, pt in pairs(self.nodes[x][y]) do
+                    if not validFunc or validFunc(pos, pt) then
+                        if pt ~= pos then
+                            if not isPlaced then
+                                res[pt] = startPos:dist(pt)
+                            else
+                                if idx == 1 then
+                                    if diff == 1 then
+                                        res[pt] = self.interval
+                                    elseif diff == 2 then
+                                        res[pt] = self.interval * sqrt2
+                                    else
+                                        res[pt] = 0
+                                    end
+                                else
+                                    res[pt] = startPos:dist(pt)
+                                end
+                            end
+                        end
+                    end
+                end
             end
         end
     end
     return res
 end
 
-function Graph:Place(pos)
+function Grid:Place(pos)
     local i, j = self:Nearest(pos)
     if i and j then
-        self.nodes[i][j] = pos
+        table.insert(self.nodes[i][j], pos)
         return true
     else
         return false
     end
 end
 
-function Graph:Draw()
-    self:Place(Vector(pwHud.hudManager.virtualCursorPos))
-    local a, b = self:Nearest(Vector(pwHud.hudManager.virtualCursorPos))
-    local edges = {}
-    if a and b then
-        edges = self:GetEdges(a, b)
-    end
+function Grid:Draw()
+    local vec = Vector(pwHud.hudManager.virtualCursorPos)
+    local edges = self:GetEdges(vec)
     for i in pairs(self.nodes) do
         if self.nodes[i] then
             for j in pairs(self.nodes[i]) do
                 if self.nodes[i][j] then
-                    local color = Color.White
-                    if i == a and j == b then
-                        color = Color.Red
-                    elseif edges[i] and edges[i][j] then
-                        color = Color.Yellow
+                    for _, pt in pairs(self.nodes[i][j]) do
+                        local color = Color.White
+                        if pt == vec then
+                            color = Color.Red
+                        elseif edges[pt] then
+                            color = Color.Yellow
+                        end
+                        DrawHandler:Circle3D(pt:toDX3(), 10, color)
                     end
-                    DrawHandler:Circle3D(self.nodes[i][j]:toDX3(), 10, color)
                 end
+            end
+        end
+    end
+end
+
+local function AStar(startPos, endPos, getEdges, ms)
+    local cost = {}
+    local visited = {}
+    cost[startPos] = 0
+    local paths = {}
+    local pq = Heap()
+    pq:Insert(0, startPos)
+    while not pq:IsEmpty() do
+        local cur, pos = pq:Remove()
+        visited[pos] = true
+        if pos == endPos then
+            local res = {}
+            local backtrack = endPos
+            table.insert(res, endPos)
+            while backtrack ~= startPos do
+                table.insert(res, paths[backtrack])
+                backtrack = paths[backtrack]
+            end
+            return res, cost[endPos]
+        end
+        for neighbor, distance in pairs(getEdges(pos)) do
+            local newCost = cur + distance
+            if not visited[neighbor] and (not cost[neighbor] or newCost < cost[neighbor]) then
+                cost[neighbor] = newCost
+                local newPriority = newCost + endPos:dist(neighbor)
+                paths[neighbor] = pos
+                pq:Insert(newPriority, neighbor)
             end
         end
     end
@@ -395,7 +581,6 @@ local Evade = {}
 
 function Evade:__init()
     self.activeSpells = {}
-    self.graph = Graph(myHero, 50, 20) -- decide that later
     self.sandboxTimer = RiotClock.time
     self:Menu()
     self:Event()
@@ -423,24 +608,24 @@ function Evade:Menu()
     self.menu.sandbox:slider("range", "Range", 100, 2000, 1000, 100)
     self.menu.sandbox:slider("radius", "Radius", 25, 500, 100, 25)
     self.menu.sandbox:slider("speed", "Speed", 0, 3000, 2000, 100)
-    self.menu:sub("graph", "Graph")
-    self.menu.graph:slider("interval", "Interval", 25, 200, 50, 25):onChange(
+    self.menu:sub("grid", "Grid")
+    self.menu.grid:slider("interval", "Interval", 25, 200, 50, 25):onChange(
         function(menu)
-            self.graph:SetInterval(menu.value)
-            self.graph:SetRange(menu.root.graph.range:get())
-            self.graph:Fill()
+            self.grid:SetInterval(menu.value)
+            self.grid:SetRange(menu.root.grid.range:get())
+            self.grid:Fill()
         end
     )
-    self.menu.graph:slider("range", "Range", 100, 2000, 1000, 100):onChange(
+    self.menu.grid:slider("range", "Range", 100, 2000, 1000, 100):onChange(
         function(menu)
-            self.graph:SetRange(menu.value)
-            self.graph:Fill()
+            self.grid:SetRange(menu.value)
+            self.grid:Fill()
         end
     )
-    self.graph = Graph(myHero, self.menu.graph.interval:get(), self.menu.graph.range:get())
+    self.grid = Grid(myHero, self.menu.grid.interval:get(), self.menu.grid.range:get())
     self.menu:sub("draw", "Draw")
     self.menu.draw:checkbox("skillshots", "Draw skillshots", true)
-    self.menu.draw:checkbox("graph", "Draw graph", true)
+    self.menu.draw:checkbox("grid", "Draw grid", true)
     self.menu.draw:checkbox("boundingRadius", "Draw bounding radius", true)
 end
 
@@ -494,7 +679,6 @@ function Evade:CreateSandboxSpells()
 end
 
 function Evade:OnTick()
-    self.graph:Fill()
     if self.menu.sandbox.enabled:get() then
         self:CreateSandboxSpells()
     end
@@ -504,6 +688,7 @@ function Evade:OnTick()
             table.remove(self.activeSpells, i)
         end
     end
+    self.grid:Fill()
 end
 
 function Evade:OnDraw()
@@ -519,8 +704,34 @@ function Evade:OnDraw()
     if self.menu.draw.boundingRadius:get() then
         DrawHandler:Circle3D(myHero.position, myHero.boundingRadius, coll and Color.Red or Color.White)
     end
-    if self.menu.draw.graph:get() then
-        self.graph:Draw()
+    local cursorPos = Vector(pwHud.hudManager.virtualCursorPos)
+    local heroPos = Vector(myHero.position)
+    if self.grid:Place(cursorPos) then
+        local paths =
+            AStar(
+            Vector(myHero.position),
+            cursorPos,
+            function(pos)
+                return self.grid:GetEdges(
+                    pos--[[ ,
+                    function(startPos, endPos)
+                        for _, spell in ipairs(self.activeSpells) do
+                            if spell:IsPathDangerous(startPos, endPos, myHero.boundingRadius, myHero.characterIntermediate.movementSpeed) then
+                                return false
+                            end
+                        end
+                        return true
+                    end ]]
+                )
+            end,
+            myHero.characterIntermediate.movementSpeed
+        ) --check up
+        if paths then
+            DrawLines(paths, Color.White)
+        end
+    end
+    if self.menu.draw.grid:get() then
+        self.grid:Draw()
     end
 end
 
