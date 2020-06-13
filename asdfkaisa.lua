@@ -1,24 +1,25 @@
 local Kaisa = {}
-local version = 1.82
-GetInternalWebResultAsync(
-    "asdfkaisa.version",
-    function(v)
-        if tonumber(v) > version then
-            DownloadInternalFileAsync(
-                "asdfkaisa.lua",
-                SCRIPT_PATH,
-                function(success)
-                    if success then
-                        PrintChat("Updated. Press F5")
-                    end
-                end
-            )
-        end
-    end
-)
+local version = 1.9
+-- GetInternalWebResultAsync(
+--     "asdfkaisa.version",
+--     function(v)
+--         if tonumber(v) > version then
+--             DownloadInternalFileAsync(
+--                 "asdfkaisa.lua",
+--                 SCRIPT_PATH,
+--                 function(success)
+--                     if success then
+--                         PrintChat("Updated. Press F5")
+--                     end
+--                 end
+--             )
+--         end
+--     end
+-- )
 require "FF15Menu"
 require "utils"
 local Orbwalker = require "FF15OL"
+local DreamTS = require("DreamTS")
 
 function OnLoad()
     if not _G.Prediction then
@@ -45,11 +46,19 @@ function Kaisa:__init()
         Q = nil,
         W = nil
     }
+
     self.turrets = {}
     for i, turret in pairs(ObjectManager:GetEnemyTurrets()) do
         self.turrets[turret.networkId] = {object = turret, range = 775 + 25}
     end
     self:Menu()
+    self.TS =
+        DreamTS(
+        self.menu.dreamTs,
+        {
+            Damage = DreamTS.Damages.AD
+        }
+    )
     AddEvent(
         Events.OnTick,
         function()
@@ -99,6 +108,7 @@ end
 
 function Kaisa:Menu()
     self.menu = Menu("asdfkaisa", "Kaisa")
+    self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("q", "AutoQ", true, 0x54)
 end
 
@@ -108,7 +118,7 @@ function Kaisa:OnDraw()
     DrawHandler:Text(
         DrawHandler.defaultFont,
         Renderer:WorldToScreen(myHero.position),
-        true and "AutoQ on" or "AutoQ off",
+        self.menu.q:get() and "AutoQ on" or "AutoQ off",
         Color.White
     )
 end
@@ -137,31 +147,27 @@ function Kaisa:CastQ()
 end
 
 function Kaisa:W()
-    local target1 = Orbwalker:GetTarget(self.w.searchRange, "AP", pwHud.hudManager.virtualCursorPos)
-    local target2 = Orbwalker:GetTarget(myHero.characterIntermediate.attackRange, "AP", myHero)
-    if target1 then
-        self:CastW(target1)
-    elseif target2 then
-        self:CastW(target2)
-    else
-        --on CC
-        for _, enemy in pairs(ObjectManager:GetEnemyHeroes()) do
-            if
-                _G.Prediction.IsValidTarget(enemy) and GetDistanceSqr(enemy) <= self.w.range * self.w.range and
-                    _G.Prediction.IsImmobile(enemy, GetDistance(enemy) / self.w.speed + self.w.delay)
+    local wTargets, wPreds = self:GetTarget(self.w, true)
+    local best1 = nil
+    local best2 = nil
+    local aa = myHero.characterIntermediate.attackRange + myHero.boundingRadius * 2
+    for _, wTarget in pairs(wTargets) do
+        if wPreds[wTarget.networkId] then
+            local wPred = wPreds[wTarget.networkId] 
+            if GetDistanceSqr(wPred.castPosition) <= aa * aa then
+                best1 = wPred
+            elseif
+                GetDistanceSqr(pwHud.hudManager.virtualCursorPos, wTarget) <=
+                    self.w.searchRange * self.w.searchRange and wPred.rates["veryslow"]
              then
-                self:CastW(enemy)
+                best2 = wPred
             end
         end
     end
-end
-
-function Kaisa:CastW(target)
-    if myHero.spellbook:CanUseSpell(1) == 0 and GetDistance(target.position) <= self.w.range then
-        local pred = _G.Prediction.GetPrediction(target, self.w, myHero)
-        if pred and pred.castPosition and (pred.rates["very slow"] or GetDistanceSqr(pred.castPosition) < 500 * 500) then
-            myHero.spellbook:CastSpell(1, pred.castPosition)
-        end
+    if best1 then
+        myHero.spellbook:CastSpell(1, best1.castPosition)
+    elseif best2 then
+        myHero.spellbook:CastSpell(1, best2.castPosition)
     end
 end
 
@@ -222,6 +228,18 @@ function Kaisa:OnExecuteCastFrame(obj, spell)
     if obj == myHero then
         if spell.spellData.name == "KaisaW" then
             self.LastCasts.W = nil
+        end
+    end
+end
+
+function Kaisa:GetTarget(spell, all, targetFilter, predFilter)
+    local units, preds = self.TS:GetTargets(spell, myHero.position, targetFilter, predFilter)
+    if all then
+        return units, preds
+    else
+        local target = self.TS.target
+        if target then
+            return target, preds[target.networkId]
         end
     end
 end

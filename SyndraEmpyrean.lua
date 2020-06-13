@@ -1,5 +1,5 @@
 local Syndra = {}
-local version = 3.13
+local version = 3.2
 
 require "FF15Menu"
 require "utils"
@@ -27,22 +27,22 @@ local paidUsers = {
     asdf = true,
     Etain = true,
     Azt = true,
-    CoachBroeki = true
+    CoachBroeki = true,
+    Bill = true
 }
 local function GetDistanceSqr(p1, p2)
     p2 = p2 or myHero
     local dx = p1.x - p2.x
     local dz = p1.z - p2.z
-    return dx*dx + dz*dz
+    return dx * dx + dz * dz
 end
-    
 
 function OnLoad()
     if not _G.Prediction then
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
     Vector = _G.Prediction.Vector
-    
+
     function Vector:angleBetweenFull(v1, v2)
         local p1, p2 = (-self + v1), (-self + v2)
         local theta = p1:polar() - p2:polar()
@@ -51,7 +51,6 @@ function OnLoad()
         end
         return theta
     end
-
 end
 
 function Syndra:init()
@@ -103,7 +102,7 @@ function Syndra:init()
             type = "linear",
             pingPongSpeed = 2000,
             range = 1250,
-            delay = 0.27,
+            delay = 0.32,
             speed = 2000,
             width = 200,
             collision = {
@@ -136,6 +135,7 @@ function Syndra:init()
         myHero.spellbook:Spell(SpellSlot.Summoner1).name == "SummonerDot" and SpellSlot.Summoner1 or
         myHero.spellbook:Spell(SpellSlot.Summoner2).name == "SummonerDot" and SpellSlot.Summoner2 or
         nil
+    self.igniteDamage = nil
     self.wGrabList = {
         ["SRU_ChaosMinionSuper"] = true,
         ["SRU_OrderMinionSuper"] = true,
@@ -252,6 +252,7 @@ function Syndra:Menu()
     --[[   self.menu:sub("interrupt", "Interrupter")
     _G.Prediction.LoadInterruptToMenu(self.menu.interrupt) ]]
     self.menu:sub("r", "R")
+    self.menu.r:checkbox("enabled", "Use R", true, byte("N"))
     for _, enemy in ipairs(self.enemyHeroes) do
         self.menu.r:checkbox(tostring(enemy.networkId), enemy.charName, true)
     end
@@ -335,6 +336,7 @@ function Syndra:OnTick()
 end
 
 function Syndra:Combo()
+    self.qTarget = nil
     for _, enemy in ipairs(self.enemyHeroes) do
         self.unitsInRange[enemy.networkId] = enemy.position and not enemy.isDead and GetDistanceSqr(enemy) < 4000000 --2000 range
     end
@@ -409,12 +411,12 @@ function Syndra:Combo()
         for _, target in pairs(eTargets) do
             if (self.menu.e:get() and not _G.Prediction.IsRecalling(myHero)) or Orbwalker:GetMode() == "Combo" then
                 if self:CastE(target, canHitOrbs) then
-                    return
+                    return true
                 end
             end
         end
     end
-
+    self.igniteDamage = 50 + 20 * myHero.experience.level
     local igniteTargets = self:GetTargetRange(650, true)
     for _, target in pairs(igniteTargets) do
         if self:UseIgnite(target) then
@@ -425,9 +427,11 @@ function Syndra:Combo()
     self.spell.r.castRange = 675 + (myHero.spellbook:Spell(SpellSlot.R).level / 3) * 75
     self:CalcRDamage()
     local rTargets = self:GetTargetRange(1500, true)
-    for _, target in pairs(rTargets) do
-        if self:CastR(target) then
-            return
+    if self.menu.r.enabled:get() then
+        for _, target in pairs(rTargets) do
+            if self:CastR(target) then
+                return
+            end
         end
     end
     if Orbwalker:GetMode() == "Combo" then
@@ -486,6 +490,9 @@ function Syndra:Combo()
                 return self.unitsInRange[unit.networkId]
             end
         )
+        if qTarget then
+            self.qTarget = qTarget
+        end
         if qTarget and qPred and not (self.spell.w.blacklist2 and qTarget.networkId == self.spell.w.blacklist2.target) then
             if
                 ((Orbwalker:GetMode() == "Combo" and
@@ -502,7 +509,7 @@ end
 function Syndra:OnDraw()
     DrawHandler:Circle3D(myHero.position, self.spell.q.range, Color.White)
     DrawHandler:Circle3D(myHero.position, self.spell.qe.range, Color.White)
-    --[[   for i in pairs(self.orbs) do
+    for i in pairs(self.orbs) do
         local orb = self.orbs[i]
         DrawHandler:Circle3D(orb.obj.position, 40, orb.isInitialized and Color.SkyBlue or Color.Red)
         DrawHandler:Text(
@@ -511,7 +518,7 @@ function Syndra:OnDraw()
             math.ceil(orb.endT - os.clock()),
             Color.White
         )
-        if GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range then
+        --[[ if GetDistanceSqr(orb.obj.position) <= self.spell.q.range * self.spell.q.range then
             local new_pos = Vector(myHero):extended(Vector(orb.obj.position), self.spell.qe.range)
             _G.Prediction.Drawing.DrawRectangle(
                 myHero.position,
@@ -519,11 +526,9 @@ function Syndra:OnDraw()
                 self.spell.qe.width,
                 orb.isInitialized and Color.SkyBlue or Color.Red
             )
-        end
+        end ]]
     end
-    if self.spell.w.heldInfo then
-        DrawHandler:Circle3D(self.spell.w.heldInfo.obj.position, 45, Color.Green)
-    end
+    --[[
     for orb in pairs(self.spell.e.blacklist) do
         DrawHandler:Circle3D(orb.position, 50, Color.Yellow)
     end
@@ -534,8 +539,14 @@ function Syndra:OnDraw()
     end ]]
     local text =
         (self.menu.qe2:get() and "Long Stun On" or "Long Stun Off") ..
-        "\n" .. (self.menu.e:get() and "Auto E: On" or "Auto E: Off")
+        "\n" .. (self.menu.e:get() and "Auto E: On" or "Auto E: Off") ..
+        "\n" .. (self.menu.r.enabled:get() and "Use R: On" or "Use R: Off")
+
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
+    --[[     if self.qTarget then
+        DrawHandler:Circle3D(self.qTarget.position, 80, Color.Red)
+
+    end ]]
     --[[ if myHero.spellbook:CanUseSpell(SpellSlot.R) == SpellState.Ready then
         for target, damage in pairs(self.rDamages) do
             local hpBarPos = target.infoComponent.hpBarScreenPosition
@@ -557,14 +568,12 @@ function Syndra:WaitToInitialize()
 end
 
 function Syndra:ShouldCast()
-    if not self.spell.e.queue then
-        for spell, time in pairs(self.last) do
-            if not time or (time and clock() < time) then
-                return false
-            end
+    for spell, time in pairs(self.last) do
+        if time and clock() < time then
+            return false
         end
-        return true
     end
+    return true
 end
 
 function Syndra:AutoGrab()
@@ -789,7 +798,7 @@ end
 
 function Syndra:CalcQEShort(target, widthMax, spell)
     self.spell.e.width = widthMax
-    local pred = _G.Prediction.GetPrediction(target, self.spell.e, myHero)
+    local pred = nil
     local lasts = {}
     local check = nil
     while not check do
@@ -846,7 +855,6 @@ function Syndra:CalcBestCastAngle(colls, all)
         local endDelta = angle
         while (isContained(count, angle, base, over360, endAngle)) do
             if count > 10 then
-                print("wtf")
             end
             if colls[angle] then
                 hasColl = true
@@ -921,7 +929,10 @@ function Syndra:CastE(target, canHitOrbs)
                                 Vector(self.myHeroPred):extended(Vector(orb.obj.position), self.spell.qe.range),
                                 Vector(self.myHeroPred)
                             )
-                            if seg:distanceTo(self:GetQPos(castPosition)) <= self.spell.e.width / 4 then
+                            if
+                                seg:distanceTo(self:GetQPos(castPosition)) <=
+                                    self.spell.e.widthMax / GetDistance(orb.obj.position) * GetDistance(castPosition)
+                             then
                                 collOrbs[orb] = 0
                             end
                         end
@@ -1046,6 +1057,7 @@ function Syndra:CastWELong(pred, castTarget, canHitOrbs)
             --return
             target, isOrb = self:GetGrabTarget()
             if target and isOrb then
+                --PrintChat("hold and throw 1 tick")
                 myHero.spellbook:CastSpellFast(SpellSlot.W, target.position)
             else
                 return
@@ -1073,7 +1085,7 @@ function Syndra:CastWELong(pred, castTarget, canHitOrbs)
             self.last.w = clock() + 0.5
             self.last.e = clock() + 0.5
             self:CheckHitOrb(castPosition)
-            --PrintChat("we")
+            --PrintChat("we long")
             pred:draw()
             return true
         end
@@ -1104,6 +1116,7 @@ function Syndra:CastWEShort(pred, canHitOrbs)
         else
             target, isOrb = self:GetGrabTarget()
             if target and isOrb then
+                --PrintChat("hold and throw 1 tick")
                 myHero.spellbook:CastSpellFast(SpellSlot.W, target.position)
             else
                 return
@@ -1140,19 +1153,21 @@ end
 function Syndra:GetIgnite(target)
     return ((self.ignite and myHero.spellbook:CanUseSpell(self.ignite) == SpellState.Ready and
         GetDistanceSqr(target) <= 360000) and --600 range
-        50 + 20 * myHero.experience.level) or
+        true) or
         nil
 end
 
 function Syndra:UseIgnite(target)
     local ignite = self:GetIgnite(target)
     if
-        ignite and ignite > target.health + target.allShield and myHero.spellbook:CanUseSpell(3) ~= SpellState.Ready and
-            ((myHero.spellbook:CanUseSpell(0) == SpellState.Ready and 1 or 0) +
-                (myHero.spellbook:CanUseSpell(1) == SpellState.Ready and 1 or 0) +
-                (myHero.spellbook:CanUseSpell(2) == SpellState.Ready and 1 or 0) <=
-                1 or
-                myHero.health / myHero.maxHealth < 0.2)
+        ignite and
+            (self.igniteDamage > target.health + target.allShield and
+                myHero.spellbook:CanUseSpell(3) ~= SpellState.Ready and
+                ((myHero.spellbook:CanUseSpell(0) == SpellState.Ready and 1 or 0) +
+                    (myHero.spellbook:CanUseSpell(1) == SpellState.Ready and 1 or 0) +
+                    (myHero.spellbook:CanUseSpell(2) == SpellState.Ready and 1 or 0) <=
+                    1 or
+                    myHero.health / myHero.maxHealth < 0.2))
      then
         myHero.spellbook:CastSpell(self.ignite, target.networkId)
         return true
@@ -1160,15 +1175,8 @@ function Syndra:UseIgnite(target)
 end
 
 function Syndra:CalcRDamage()
-    local validOrbs = 0
-    for i = 1, #self.orbs do
-        local orb = self.orbs[i]
-        if orb and orb.isInitialized then
-            validOrbs = validOrbs + 1
-        end
-    end
-    local count = min(7, 3 + validOrbs)
-    self.spell.r.baseDamage = count * (50 + 45 * myHero.spellbook:Spell(SpellSlot.R).level + 0.2 * self:GetTotalAp())
+    local r = myHero.spellbook:Spell(SpellSlot.R)
+    self.spell.r.baseDamage = r.currentAmmoCount * (50 + 45 * r.level + 0.2 * self:GetTotalAp())
 end
 
 function Syndra:RExecutes(target)
@@ -1187,8 +1195,7 @@ function Syndra:RExecutes(target)
         end
     end
     base = dmgLib:CalculateMagicDamage(myHero, target, base)
-    local ignite = self:GetIgnite(target)
-    self.rDamages[target] = base + (ignite or 0)
+    self.rDamages[target] = base + (self:GetIgnite(target) and self.igniteDamage or 0)
     local diff = target.health - base
     if diff <= 0 then
         return true, false
@@ -1269,10 +1276,10 @@ end
 function Syndra:CastR(target)
     local shouldCast, needIgnite = self:RConditions(target)
     if shouldCast then
+        myHero.spellbook:CastSpellFast(SpellSlot.R, target.networkId)
         if needIgnite then
-            myHero.spellbook:CastSpell(self.ignite, target.networkId)
+            myHero.spellbook:CastSpellFast(self.ignite, target.networkId)
         end
-        myHero.spellbook:CastSpell(SpellSlot.R, target.networkId)
         self.last.r = clock() + 0.5
         --PrintChat("r")
         return true
@@ -1301,7 +1308,7 @@ function Syndra:OnCreateObj(obj)
             local maxTime = 0
             for i = 1, #minions do
                 local minion = minions[i]
-                if minion and not minion.isDead and GetDistanceSqr(minion) < self.spell.w.grabRangeSqr then
+                if minion and not minion.isDead then
                     local buffs = minion.buffManager.buffs
                     for i = 1, #buffs do
                         local buff = buffs[i]
@@ -1316,13 +1323,25 @@ function Syndra:OnCreateObj(obj)
                 self.spell.w.heldInfo = {obj = maxObj, isOrb = false}
             end
             if not self.spell.w.heldInfo then
+                local lowestDist = 10000 * 1000
+                local idx = 0
                 for i in ipairs(self.orbs) do
                     local orb = self.orbs[i]
-                    if orb.isInitialized and GetDistance(obj.position, orb.obj.position) <= 1 then
-                        self.spell.w.heldInfo = {obj = orb.obj, isOrb = true}
-                        orb.endT = clock() + 6.25
-                        self.spell.e.blacklist[orb.obj] = {pos = orb.obj.position, time = clock() + 0.06}
+                    if orb.isInitialized then
+                        local dist = GetDistanceSqr(obj.position, orb.obj.position)
+                        if dist <= lowestDist then
+                            lowestDist = dist
+                            idx = i
+                        end
                     end
+                end
+                if idx then
+                    self.spell.w.heldInfo = {obj = self.orbs[idx].obj, isOrb = true}
+                    self.orbs[idx].endT = clock() + 6.25
+                    self.spell.e.blacklist[self.orbs[idx].obj] = {
+                        pos = self.orbs[idx].obj.position,
+                        time = clock() + 0.06
+                    }
                 end
             end
         end

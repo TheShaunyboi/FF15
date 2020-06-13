@@ -1,5 +1,5 @@
 local Ezreal = {}
-local version = 2.61
+local version = 2.72
 
 GetInternalWebResultAsync("asdfezreal.version", function(v)
     if tonumber(v) > version then
@@ -93,12 +93,12 @@ function Ezreal:__init()
             self:OnDraw()
         end
     )
-    AddEvent(
+   --[[  AddEvent(
         Events.OnBuffGain,
         function(obj, buff)
             self:OnBuffGain(obj, buff)
         end
-    )
+    ) ]]
     AddEvent(
         Events.OnBuffLost,
         function(obj, buff)
@@ -130,37 +130,16 @@ end
 function Ezreal:Menu()
     self.menu = Menu("asdfezreal", "Ezreal")
     self.menu:sub("dreamTs", "Target Selector")
+    self.menu:checkbox("w", "Check W for AA or possible Q ", true)
     self.menu:checkbox("q", "AutoQ", true, string.byte("T"))
     self.menu:checkbox("user", "Use R", true)
     self.menu:key("r", "Manual R Key", 0x5A)
-    self.menu:sub("ezrealDraw", "Draw")
-    self.menu.ezrealDraw:checkbox("q", "Q", true)
-    self.menu.ezrealDraw:slider("qa", "Alpha", 1, 255, 150)
-    self.menu.ezrealDraw:slider("q0r", "AutoQ off: Red", 1, 255, 150)
-    self.menu.ezrealDraw:slider("q0g", "AutoQ off: Green", 1, 255, 150)
-    self.menu.ezrealDraw:slider("q0b", "AutoQ off: Blue", 1, 255, 150)
-    self.menu.ezrealDraw:slider("q1r", "AutoQ on: Red", 1, 255, 255)
-    self.menu.ezrealDraw:slider("q1g", "AutoQ on: Green", 1, 255, 150)
-    self.menu.ezrealDraw:slider("q1b", "AutoQ on: Blue", 1, 255, 150)
 end
 
 function Ezreal:OnDraw()
     DrawHandler:Circle3D(myHero.position, self.q.range, Color.White)
     local text = self.menu.q:get() and "AutoQ on" or "AutoQ off"
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
-
-    if self.wBuffTarget then
-        DrawHandler:Circle3D(
-            self.wBuffTarget.position,
-            20,
-            self:Hex(
-                self.menu.ezrealDraw.qa:get(),
-                self.menu.ezrealDraw.q0r:get(),
-                self.menu.ezrealDraw.q0g:get(),
-                self.menu.ezrealDraw.q0b:get()
-            )
-        )
-    end
 end
 
 function Ezreal:ShouldCast()
@@ -197,7 +176,7 @@ function Ezreal:CastQ(isCombo)
             true,
             nil,
             function(unit, pred)
-                return pred.rates["very slow"]
+                return pred.rates["slow"]
             end
         )
         if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
@@ -220,10 +199,10 @@ function Ezreal:OnTick()
         Orbwalker:Setup()
         self.orbSetup = true
     end
-    if self.orbSetup and not Orbwalker:IsAttacking() then
+    if self.orbSetup and not Orbwalker:IsAttacking() and not(_G.JustEvade and _G.JustEvade.Loaded() and _G.JustEvade.Evading())then
         if self.menu.r:get() and myHero.spellbook:CanUseSpell(3) == 0 then
             local rTarget, rPred = self:GetTarget(self.r)
-            if rTarget and rPred and rPred.rates["very slow"] then
+            if rTarget and rPred and rPred.rates["slow"] then
                 myHero.spellbook:CastSpell(3, self:GetCastPosition(rPred))
                 self.LastCasts["R"] = RiotClock.time
                 return
@@ -240,24 +219,35 @@ function Ezreal:OnTick()
                         return pred:heroCollision(2) or _G.Prediction.IsImmobile(unit, pred.interceptionTime)
                     end
                 )
-                if rTarget and rPred and rPred.rates["very slow"] then
+                if rTarget and rPred and rPred.rates["slow"] then
                     myHero.spellbook:CastSpell(3, self:GetCastPosition(rPred))
                     self.LastCasts["R"] = RiotClock.time
+                    PrintChat('r')
                     return
                 end
             end
             if myHero.spellbook:CanUseSpell(1) == 0 then
                 local wTarget, wPred = self:GetTarget(self.w)
-                if wTarget and wPred and wPred.rates["very slow"] then
-                    myHero.spellbook:CastSpell(1, self:GetCastPosition(wPred))
-                    self.LastCasts["W"] = RiotClock.time
-                    return
+                if wTarget and wPred and wPred.rates["slow"] then
+                    if self.menu.w:get() then
+                        local pred = _G.Prediction.GetPrediction(wTarget, self.q, myHero)
+                        local aa = myHero.characterIntermediate.attackRange + myHero.boundingRadius
+                        if (myHero.spellbook:CanUseSpell(0) == 0 and pred) or GetDistanceSqr(wTarget.position, myHero.position) <= aa * aa then
+                            myHero.spellbook:CastSpell(1, self:GetCastPosition(wPred))
+                            self.LastCasts["W"] = RiotClock.time
+                            return
+                        end
+                    else
+                        myHero.spellbook:CastSpell(1, self:GetCastPosition(wPred))
+                        self.LastCasts["W"] = RiotClock.time
+                        return
+                    end
                 end
             end
             if self:CastQ(true) then
                 return
             end
-        elseif self.menu.q:get() and not _G.Prediction.IsRecalling(myHero) then
+        elseif self.menu.q:get()  then
             if self:CastQ() then
                 return
             end

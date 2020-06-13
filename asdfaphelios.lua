@@ -1,29 +1,29 @@
 local Aphelios = {}
-local version = 2.21
+local version = 2.3
 
 GetInternalWebResultAsync(
-    'asdfaphelios.version',
+    "asdfaphelios.version",
     function(v)
         if tonumber(v) > version then
             DownloadInternalFileAsync(
-                'asdfaphelios.lua',
+                "asdfaphelios.lua",
                 SCRIPT_PATH,
                 function(success)
                     if success then
-                        PrintChat('Updated. Press F5')
+                        PrintChat("Updated. Press F5")
                     end
                 end
             )
         end
     end
 )
-require 'FF15Menu'
-require 'utils'
+require "FF15Menu"
+require "utils"
 local Vector
-local Circle = require('BestAOEPos').Circle
-local DreamTS = require('DreamTS')
-local dmgLib = require('FF15DamageLib')
-local Orbwalker = require 'FF15OL'
+local Circle = require("BestAOEPos").Circle
+local DreamTS = require("DreamTS")
+local dmgLib = require("FF15DamageLib")
+local Orbwalker = require "FF15OL"
 
 function OnLoad()
     if not _G.Prediction then
@@ -44,40 +44,40 @@ end
 function Aphelios:__init()
     self.orbSetup = false
     self.calibrumQ = {
-        type = 'linear',
+        type = "linear",
         speed = 1800,
         range = 1350, --1450
         delay = 0.35,
         width = 120,
         collision = {
-            ['Wall'] = true,
-            ['Hero'] = true,
-            ['Minion'] = true
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = true
         }
     }
-        self.infernumQ = {
-            type = 'linear',
-            delay = 0.4,
-            range = 600,
-            speed = math.huge,
-            width = 0,
-            angle = 45
-        }
+    self.infernumQ = {
+        type = "linear",
+        delay = 0.4,
+        range = 600,
+        speed = math.huge,
+        width = 0,
+        angle = 45
+    }
     self.crescendumQ = {
         aaRange = 530,
         delay = 0.25,
         range = 475
     }
     self.r = {
-        type = 'linear',
+        type = "linear",
         speed = 2050,
-        range = 1500,
+        range = 1300,
         delay = 0.5,
         width = 250,
         collision = {
-            ['Wall'] = true,
-            ['Hero'] = true,
-            ['Minion'] = false
+            ["Wall"] = true,
+            ["Hero"] = true,
+            ["Minion"] = false
         },
         explosionRadius = 350
     }
@@ -114,20 +114,26 @@ function Aphelios:__init()
         end
     )
     AddEvent(
+        Events.OnBuffLost,
+        function(...)
+            self:OnBuffLost(...)
+        end
+    )
+    AddEvent(
         Events.OnProcessSpell,
         function(...)
             self:OnProcessSpell(...)
         end
     )
 
-    PrintChat('Aphelios loaded')
-    self.font = DrawHandler:CreateFont('Calibri', 10)
+    PrintChat("Aphelios loaded")
+    self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
 function Aphelios:Menu()
-    self.menu = Menu('asdfaphelios', 'Aphelios')
-    self.menu:sub('dreamTs', 'Target Selector')
-    self.menu:key('r', 'Manual R Key', 0x5A)
+    self.menu = Menu("asdfaphelios", "Aphelios")
+    self.menu:sub("dreamTs", "Target Selector")
+    self.menu:key("r", "Manual R Key", 0x5A)
 end
 
 function Aphelios:OnDraw()
@@ -152,34 +158,16 @@ function Aphelios:GetCalibrumQPred()
         self.calibrumQ,
         false,
         function(unit)
-            return not unit.buffManager:HasBuff('aphelioscalibrumbonusrangedebuff')
+            return not unit.buffManager:HasBuff("aphelioscalibrumbonusrangedebuff")
         end
     )
 end
 
 function Aphelios:CalibrumQ(qTarget, qPred)
-    if qTarget and qPred and qPred.rates['veryslow'] then
+    if qTarget and qPred and qPred.rates["veryslow"] then
         qPred:draw()
         myHero.spellbook:CastSpell(0, qPred.castPosition)
         return true
-    end
-end
-
-function Aphelios:CalibrumAuto()
-    if Orbwalker:CanAttack() and not Orbwalker:IsAttacking() then
-        local aaDist = myHero.characterIntermediate.attackRange + myHero.boundingRadius
-        local target =
-            self:GetTargetAuto(
-            function(unit)
-                local dist = GetDistanceSqr(unit, myHero)
-                return dist >= aaDist and dist <= 1800 * 1800 and
-                    unit.buffManager:HasBuff('aphelioscalibrumbonusrangedebuff')
-            end,
-            false
-        )
-        if target then
-            Orbwalker:Attack(target)
-        end
     end
 end
 
@@ -297,7 +285,7 @@ function Aphelios:ShouldCrescendumQ()
         if res and (res.hits > 1 or res.hits == 1) and GetDistanceSqr(res.castPos) <= 450 * 450 then
             return true, res.castPos
         end
-    end 
+    end
 end
 
 function Aphelios:ShouldGravitumQ()
@@ -313,7 +301,7 @@ function Aphelios:ShouldGravitumQ()
         local shouldCast = true
         local dist = myHero.characterIntermediate.attackRange + myHero.boundingRadius
         for _, target in pairs(targets) do
-            if target.buffManager:HasBuff('ApheliosGravitumDebuff') then
+            if target.buffManager:HasBuff("ApheliosGravitumDebuff") then
                 hasTarget = true
             else
                 if GetDistanceSqr(target, myHero) <= dist * dist then
@@ -358,7 +346,7 @@ function Aphelios:CastR()
             true,
             nil,
             function(unit, pred)
-                return pred.rates['slow']
+                return pred.rates["slow"]
             end
         )
         local maxTarget = nil
@@ -408,31 +396,31 @@ end
 
 function Aphelios:GetGuns()
     local qName = myHero.spellbook:Spell(0).name
-    if qName == 'ApheliosCalibrumQ' then
-        self.guns.main = 'Calibrum'
-    elseif qName == 'ApheliosSeverumQ' then
-        self.guns.main = 'Severnum'
-    elseif qName == 'ApheliosGravitumQ' then
-        self.guns.main = 'Gravitum'
-    elseif qName == 'ApheliosInfernumQ' then
-        self.guns.main = 'Infernum'
-    elseif qName == 'ApheliosCrescendumQ' then
-        self.guns.main = 'Crescendum'
+    if qName == "ApheliosCalibrumQ" then
+        self.guns.main = "Calibrum"
+    elseif qName == "ApheliosSeverumQ" then
+        self.guns.main = "Severnum"
+    elseif qName == "ApheliosGravitumQ" then
+        self.guns.main = "Gravitum"
+    elseif qName == "ApheliosInfernumQ" then
+        self.guns.main = "Infernum"
+    elseif qName == "ApheliosCrescendumQ" then
+        self.guns.main = "Crescendum"
     end
     local buffs = myHero.buffManager.buffs
     for i in pairs(buffs) do
         local buff = buffs[i]
         if buff then
-            if buff.name == 'ApheliosOffHandBuffCalibrum' then
-                self.guns.off = 'Calibrum'
-            elseif buff.name == 'ApheliosOffHandBuffSeverum' then
-                self.guns.off = 'Severnum'
-            elseif buff.name == 'ApheliosOffHandBuffGravitum' then
-                self.guns.off = 'Gravitum'
-            elseif buff.name == 'ApheliosOffHandBuffInfernum' then
-                self.guns.off = 'Infernum'
-            elseif buff.name == 'ApheliosOffHandBuffCrescendum' then
-                self.guns.off = 'Crescendum'
+            if buff.name == "ApheliosOffHandBuffCalibrum" then
+                self.guns.off = "Calibrum"
+            elseif buff.name == "ApheliosOffHandBuffSeverum" then
+                self.guns.off = "Severnum"
+            elseif buff.name == "ApheliosOffHandBuffGravitum" then
+                self.guns.off = "Gravitum"
+            elseif buff.name == "ApheliosOffHandBuffInfernum" then
+                self.guns.off = "Infernum"
+            elseif buff.name == "ApheliosOffHandBuffCrescendum" then
+                self.guns.off = "Crescendum"
             end
         end
     end
@@ -457,9 +445,8 @@ function Aphelios:OnTick()
         if self.menu.r:get() then
             self:CastR()
         end
-        if Orbwalker:GetMode() == 'Combo' then
-            self:CalibrumAuto()
-            if self.guns.main == 'Calibrum' then
+        if Orbwalker:GetMode() == "Combo" then
+            if self.guns.main == "Calibrum" then
                 local qPred, qTarget = self:GetCalibrumQPred()
                 if qPred and qTarget and myHero.spellbook:CanUseSpell(0) == 0 then
                     self:CalibrumQ(qPred, qTarget)
@@ -474,8 +461,8 @@ function Aphelios:OnTick()
                         end
                     end
                 end
-            elseif self.guns.main == 'Severnum' then
-                if self.guns.off == 'Calibrum' and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
+            elseif self.guns.main == "Severnum" then
+                if self.guns.off == "Calibrum" and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
                     return
                 elseif myHero.spellbook:CanUseSpell(0) == 0 then
                     self:SevernumQ()
@@ -484,33 +471,36 @@ function Aphelios:OnTick()
                     local useSpell = myHero.spellbook:CanUseSpell(1) == 0
                     if useSpell then
                         if
-                            self.guns.off == 'Gravitum' and
+                            self.guns.off == "Gravitum" and
                                 (not self.cd[self.guns.off] and (self:ShouldGravitumQ() or target) or
-                                    (target and not target.buffManager:HasBuff('ApheliosGravitumDebuff')))
+                                    (target and not target.buffManager:HasBuff("ApheliosGravitumDebuff")))
                          then
                             myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
-                        elseif self.guns.off == 'Infernum' and not self.cd[self.guns.off] and target then
+                        elseif self.guns.off == "Infernum" and not self.cd[self.guns.off] and target then
                             myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
-                        elseif self.guns.off == 'Crescendum' and not self.cd[self.guns.off] and self:ShouldCrescendumQ() then
+                        elseif
+                            self.guns.off == "Crescendum" and not self.cd[self.guns.off] and
+                                (self:ShouldCrescendumQ() or (target and GetDistanceSqr(target) <= 300 * 300))
+                         then
                             myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
                         end
                     end
                 end
-            elseif self.guns.main == 'Gravitum' then
-                if self.guns.off == 'Calibrum' and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
+            elseif self.guns.main == "Gravitum" then
+                if self.guns.off == "Calibrum" and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
                     return
                 elseif myHero.spellbook:CanUseSpell(0) == 0 then
                     self:GravitumQ()
                 else
                     local target = Orbwalker:GetTarget()
                     local useSpell = myHero.spellbook:CanUseSpell(1) == 0
-                    if target and target.buffManager:HasBuff('ApheliosGravitumDebuff') and useSpell then
-                        print(target.buffManager:HasBuff('ApheliosGravitumDebuff').remainingTime)
+                    if target and target.buffManager:HasBuff("ApheliosGravitumDebuff") and useSpell then
+                        print(target.buffManager:HasBuff("ApheliosGravitumDebuff").remainingTime)
                         myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
                     end
                 end
-            elseif self.guns.main == 'Infernum' then
-                if self.guns.off == 'Calibrum' and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
+            elseif self.guns.main == "Infernum" then
+                if self.guns.off == "Calibrum" and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
                     return
                 elseif myHero.spellbook:CanUseSpell(0) == 0 then
                     self:InfernumQ()
@@ -519,28 +509,28 @@ function Aphelios:OnTick()
                     local useSpell = myHero.spellbook:CanUseSpell(1) == 0
                     if useSpell then
                         if
-                            self.guns.off == 'Severnum' and target and
-                                (self.cd[self.guns.off] or myHero.health / myHero.maxHealth < 0.30 or
-                                    self:NearEnemiesCount() <= 2)
+                            self.guns.off == "Severnum" and target and
+                                (self.cd[self.guns.off] or myHero.health / myHero.maxHealth < 0.30)
                          then
                             myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
                         elseif
-                            self.guns.off == 'Gravitum' and
+                            self.guns.off == "Gravitum" and
                                 (not self.cd[self.guns.off] and (self:ShouldGravitumQ() or target) or
-                                    (target and not target.buffManager:HasBuff('ApheliosGravitumDebuff')))
+                                    (target and not target.buffManager:HasBuff("ApheliosGravitumDebuff")))
                          then
                             myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
                         elseif
-                            self.guns.off == 'Crescendum' and
+                            self.guns.off == "Crescendum" and
                                 ((self:ShouldCrescendumQ() and not self.cd[self.guns.off]) or
-                                    self:NearEnemiesCount() <= 2)
+                                    self:NearEnemiesCount() <= 2 or
+                                    (target and GetDistanceSqr(target) <= 300 * 300))
                          then
                             myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
                         end
                     end
                 end
-            elseif self.guns.main == 'Crescendum' then
-                if self.guns.off == 'Calibrum' and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
+            elseif self.guns.main == "Crescendum" then
+                if self.guns.off == "Calibrum" and myHero.spellbook:CanUseSpell(1) == 0 and self:CalibrumSwitch() then
                     return
                 else
                     local _, castPos = self:ShouldCrescendumQ()
@@ -550,16 +540,20 @@ function Aphelios:OnTick()
                         local target = Orbwalker:GetTarget()
                         local useSpell = myHero.spellbook:CanUseSpell(1) == 0
                         if useSpell then
-                            if self.guns.off == 'Severnum' and not self.cd[self.guns.off] and target then
-                                myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
-                            elseif
-                                self.guns.off == 'Gravitum' and
-                                    (not self.cd[self.guns.off] and (self:ShouldGravitumQ() or target) or
-                                        (target and not target.buffManager:HasBuff('ApheliosGravitumDebuff')))
+                            if
+                                self.guns.off == "Severnum" and
+                                    (not self.cd[self.guns.off] or myHero.health / myHero.maxHealth < 0.3) and
+                                    target
                              then
                                 myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
                             elseif
-                                self.guns.off == 'Infernum' and target and
+                                self.guns.off == "Gravitum" and
+                                    (not self.cd[self.guns.off] and (self:ShouldGravitumQ() or target) or
+                                        (target and not target.buffManager:HasBuff("ApheliosGravitumDebuff")))
+                             then
+                                myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
+                            elseif
+                                self.guns.off == "Infernum" and target and
                                     (not self.cd[self.guns.off] or self:NearEnemiesCount() > 2)
                              then
                                 myHero.spellbook:CastSpell(1, pwHud.hudManager.activeVirtualCursorPos)
@@ -573,12 +567,23 @@ function Aphelios:OnTick()
 end
 
 function Aphelios:OnBuffGain(obj, buff)
-    if obj ~= myHero then
+    if obj == myHero then
+        if buff.name == "ApheliosSeverumQ" then
+            Orbwalker:BlockAttack(true)
+        end
+    end
+end
+
+function Aphelios:OnBuffLost(obj, buff)
+    if obj == myHero then
+        if buff.name == "ApheliosSeverumQ" then
+            Orbwalker:BlockAttack(false)
+        end
     end
 end
 
 function Aphelios:OnProcessSpell(unit, spell)
-    if unit == myHero and spell.spellData.name == 'ApheliosW' then
+    if unit == myHero and spell.spellData.name == "ApheliosW" then
         local cd = myHero.spellbook:Spell(0).cooldownTimeRemaining
         if cd > 0 then
             self.cd[self.guns.main] = RiotClock.time + cd
@@ -614,6 +619,6 @@ function Aphelios:GetTargetAuto(targetFilter, all)
     end
 end
 
-if myHero.charName == 'Aphelios' then
+if myHero.charName == "Aphelios" then
     Aphelios:__init()
 end
