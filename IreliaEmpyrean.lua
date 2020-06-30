@@ -82,6 +82,7 @@ function Irelia:__init()
     for i, turret in pairs(ObjectManager:GetEnemyTurrets()) do
         self.turrets[turret.networkId] = {object = turret, range = 775 + 25}
     end
+    self.cage = nil
     self.r = {
         type = "linear",
         speed = 2000,
@@ -305,10 +306,7 @@ function Irelia:GetQDamage(target)
 end
 
 function Irelia:CastQ(target)
-    if
-        GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and
-            not target.buffManager:HasBuff("jaxcounterstrike")
-     then
+    if GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and not target.buffManager:HasBuff("JaxCounterStrike") and not target.buffManager:HasBuff("GalioW") then
         if not self.menu.turret:get() or not self:UnderTurret(target) or self:UnderTurret(myHero) then
             myHero.spellbook:CastSpellFast(0, target.networkId)
             self.last.q = RiotClock.time
@@ -703,6 +701,11 @@ function Irelia:OnProcessSpell(obj, spell)
             self.last.r = nil
         end
     end
+    if obj ~= nil and spell ~= nil and obj ~= myHero and obj.team ~= myHero.team then
+        if spell.spellData.name == "VeigarEventHorizon" then
+            self.cage = D3DXVECTOR3(spell.endPos.x, myHero.y, spell.endPos.z)
+        end
+    end
 end
 
 function Irelia:OnExecuteCastFrame(obj, spell)
@@ -715,10 +718,16 @@ function Irelia:OnCreateObj(obj)
     if obj and GetDistance(obj) < 300 and obj.name:find("Glow_buf") then
         sheenTimer = os.clock() + 1.7
     end
+    if obj.name:lower():find("cage_green") then
+        self.cage = obj
+    end
 end
 
 function Irelia:OnDeleteObj(obj)
     --print("Delete: ".. obj.name)
+    if obj.name:lower():find("cage_green") then
+        self.cage = nil
+    end
 end
 
 function Irelia:GetTarget(spell, all, source, targetFilter, predFilter)
