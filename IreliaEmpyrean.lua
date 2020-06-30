@@ -307,7 +307,7 @@ function Irelia:CastQ(target)
             not target.buffManager:HasBuff("jaxcounterstrike")
      then
         if not self.menu.turret:get() or not self:UnderTurret(target) or self:UnderTurret(myHero) then
-            myHero.spellbook:CastSpell(0, target.networkId)
+            myHero.spellbook:CastSpellFast(0, target.networkId)
             self.last.q = RiotClock.time
             return true
         end
