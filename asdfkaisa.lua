@@ -1,21 +1,21 @@
 local Kaisa = {}
-local version = 1.9
--- GetInternalWebResultAsync(
---     "asdfkaisa.version",
---     function(v)
---         if tonumber(v) > version then
---             DownloadInternalFileAsync(
---                 "asdfkaisa.lua",
---                 SCRIPT_PATH,
---                 function(success)
---                     if success then
---                         PrintChat("Updated. Press F5")
---                     end
---                 end
---             )
---         end
---     end
--- )
+local version = 1.91
+GetInternalWebResultAsync(
+    "asdfkaisa.version",
+    function(v)
+        if tonumber(v) > version then
+            DownloadInternalFileAsync(
+                "asdfkaisa.lua",
+                SCRIPT_PATH,
+                function(success)
+                    if success then
+                        PrintChat("Updated. Press F5")
+                    end
+                end
+            )
+        end
+    end
+)
 require "FF15Menu"
 require "utils"
 local Orbwalker = require "FF15OL"
@@ -153,12 +153,12 @@ function Kaisa:W()
     local aa = myHero.characterIntermediate.attackRange + myHero.boundingRadius * 2
     for _, wTarget in pairs(wTargets) do
         if wPreds[wTarget.networkId] then
-            local wPred = wPreds[wTarget.networkId] 
+            local wPred = wPreds[wTarget.networkId]
             if GetDistanceSqr(wPred.castPosition) <= aa * aa then
                 best1 = wPred
             elseif
-                GetDistanceSqr(pwHud.hudManager.virtualCursorPos, wTarget) <=
-                    self.w.searchRange * self.w.searchRange and wPred.rates["veryslow"]
+                GetDistanceSqr(pwHud.hudManager.virtualCursorPos, wTarget) <= self.w.searchRange * self.w.searchRange and
+                    wPred.rates["veryslow"]
              then
                 best2 = wPred
             end
@@ -191,7 +191,7 @@ function Kaisa:OnTick()
         end
         if Orbwalker:GetMode() == "Combo" then
             self:CastQ()
-            if not Orbwalker:IsAttacking() then
+            if not Orbwalker:IsAttacking() and not (_G.JustEvade and _G.JustEvade.Loaded() and _G.JustEvade.Evading()) then
                 self:W()
             end
         end

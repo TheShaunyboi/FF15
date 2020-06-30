@@ -1,16 +1,21 @@
 local Ezreal = {}
-local version = 2.72
+local version = 3
 
-GetInternalWebResultAsync("asdfezreal.version", function(v)
-    if tonumber(v) > version then
-        DownloadInternalFileAsync("asdfezreal.lua", SCRIPT_PATH, function (success) 
-            if success then
-                PrintChat("Updated. Press F5")
-            end
+GetInternalWebResultAsync(
+    "asdfezreal.version",
+    function(v)
+        if tonumber(v) > version then
+            DownloadInternalFileAsync(
+                "asdfezreal.lua",
+                SCRIPT_PATH,
+                function(success)
+                    if success then
+                        --PrintChat("Updated. Press F5")
+                    end
+                end
+            )
         end
-    )
     end
-end
 )
 require "FF15Menu"
 require "utils"
@@ -34,7 +39,7 @@ function Ezreal:__init()
         type = "linear",
         speed = 2000,
         range = 1150,
-        delay = 0.28,
+        delay = 0.25,
         width = 125,
         collision = {
             ["Wall"] = true,
@@ -93,12 +98,12 @@ function Ezreal:__init()
             self:OnDraw()
         end
     )
-   --[[  AddEvent(
+    AddEvent(
         Events.OnBuffGain,
         function(obj, buff)
             self:OnBuffGain(obj, buff)
         end
-    ) ]]
+    ) 
     AddEvent(
         Events.OnBuffLost,
         function(obj, buff)
@@ -123,7 +128,7 @@ function Ezreal:__init()
             self:OnDeleteObject(obj)
         end
     )
-    PrintChat("Ezreal loaded")
+    --PrintChat("Ezreal loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
@@ -137,19 +142,37 @@ function Ezreal:Menu()
 end
 
 function Ezreal:OnDraw()
-    DrawHandler:Circle3D(myHero.position, self.q.range, Color.White)
+    DrawHandler:Circle3D(
+        myHero.position,
+        self.q.range,
+        (self.orbSetup and Orbwalker:GetMode() == "Combo") and Color.Red or Color.White
+    )
     local text = self.menu.q:get() and "AutoQ on" or "AutoQ off"
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
 
 function Ezreal:ShouldCast()
     for spell, time in pairs(self.LastCasts) do
-        if time and RiotClock.time < time + 0.25 + NetClient.ping / 2000 + 0.06 then
+        if time and RiotClock.time < time then
             return false
         end
     end
 
     return true
+end
+
+function Ezreal:DynamicRange(pred, target, spell)
+    local distToPosition = GetDistance(target)
+    local distToCast = GetDistance(pred.castPosition)
+    if distToPosition <= distToCast then
+        return true
+    end
+    if
+        distToPosition + (distToPosition - distToCast) * (pred.interceptionTime - spell.delay - NetClient.ping / 2000 - 0.07) / pred.interceptionTime <
+            spell.range
+     then
+        return true
+    end
 end
 
 function Ezreal:GetCastPosition(pred)
@@ -165,30 +188,31 @@ function Ezreal:CastQ(isCombo)
                 if
                     turretObj and turretObj.isValid and turretObj.health > 0 and
                         GetDistanceSqr(turretObj) <= turret.range * turret.range
-                then
+                 then
                     return
                 end
             end
         end
-        local qTargets, qPred =
-            self:GetTarget(
-            self.q,
-            true,
-            nil,
-            function(unit, pred)
-                return pred.rates["slow"]
-            end
-        )
+        local qTargets, qPred = self:GetTarget(self.q, true)
         if self.wBuffTarget and qPred[self.wBuffTarget.networkId] then
-            myHero.spellbook:CastSpell(0, self:GetCastPosition(qPred[self.wBuffTarget.networkId]))
-            self.LastCasts["Q"] = RiotClock.time
-            return true
+            if qPred[self.wBuffTarget.networkId].rates["slow"] then
+                if self:DynamicRange(qPred[self.wBuffTarget.networkId], self.wBuffTarget, self.q) then
+                    myHero.spellbook:CastSpellFast(0, self:GetCastPosition(qPred[self.wBuffTarget.networkId]))
+                    self.LastCasts["Q"] = RiotClock.time + 0.25 + NetClient.ping / 2000 + 0.07
+                    return true
+                end
+            end
+            return
         end
-        for _, pred in pairs(qPred) do
-            if pred then
-                myHero.spellbook:CastSpell(0, self:GetCastPosition(pred))
-                self.LastCasts["Q"] = RiotClock.time
-                return true
+        for _, target in pairs(qTargets) do
+            if qPred[target.networkId] then
+                local pred = qPred[target.networkId]
+                if pred.rates["slow"] and self:DynamicRange(pred, target, self.q) then
+                    myHero.spellbook:CastSpellFast(0, self:GetCastPosition(pred))
+                    self.LastCasts["Q"] = RiotClock.time + 0.25 + NetClient.ping / 2000 + 0.07
+                    return true
+                end
+                return
             end
         end
     end
@@ -199,12 +223,15 @@ function Ezreal:OnTick()
         Orbwalker:Setup()
         self.orbSetup = true
     end
-    if self.orbSetup and not Orbwalker:IsAttacking() and not(_G.JustEvade and _G.JustEvade.Loaded() and _G.JustEvade.Evading())then
+    if
+        self.orbSetup and not Orbwalker:IsAttacking() and
+            not (_G.JustEvade and _G.JustEvade.Loaded() and _G.JustEvade.Evading()) and self:ShouldCast()
+     then
         if self.menu.r:get() and myHero.spellbook:CanUseSpell(3) == 0 then
             local rTarget, rPred = self:GetTarget(self.r)
             if rTarget and rPred and rPred.rates["slow"] then
-                myHero.spellbook:CastSpell(3, self:GetCastPosition(rPred))
-                self.LastCasts["R"] = RiotClock.time
+                myHero.spellbook:CastSpellFast(3, self:GetCastPosition(rPred))
+                self.LastCasts["R"] = RiotClock.time + 1 + NetClient.ping / 2000 + 0.07
                 return
             end
         end
@@ -220,35 +247,43 @@ function Ezreal:OnTick()
                     end
                 )
                 if rTarget and rPred and rPred.rates["slow"] then
-                    myHero.spellbook:CastSpell(3, self:GetCastPosition(rPred))
-                    self.LastCasts["R"] = RiotClock.time
-                    PrintChat('r')
+                    myHero.spellbook:CastSpellFast(3, self:GetCastPosition(rPred))
+                    self.LastCasts["R"] = RiotClock.time + 1 + NetClient.ping / 2000 + 0.07
                     return
                 end
             end
             if myHero.spellbook:CanUseSpell(1) == 0 then
                 local wTarget, wPred = self:GetTarget(self.w)
-                if wTarget and wPred and wPred.rates["slow"] then
+                if wTarget and wPred and wPred.rates["slow"] and self:DynamicRange(wPred, wTarget, self.w) then
                     if self.menu.w:get() then
                         local pred = _G.Prediction.GetPrediction(wTarget, self.q, myHero)
                         local aa = myHero.characterIntermediate.attackRange + myHero.boundingRadius
-                        if (myHero.spellbook:CanUseSpell(0) == 0 and pred) or GetDistanceSqr(wTarget.position, myHero.position) <= aa * aa then
-                            myHero.spellbook:CastSpell(1, self:GetCastPosition(wPred))
-                            self.LastCasts["W"] = RiotClock.time
+                        if
+                            (myHero.spellbook:CanUseSpell(0) == 0 and pred) or
+                                GetDistanceSqr(wTarget.position, myHero.position) <= aa * aa
+                         then
+                            myHero.spellbook:CastSpellFast(1, self:GetCastPosition(wPred))
+                            self.LastCasts["W"] = RiotClock.time + 0.25 + NetClient.ping / 2000 + 0.07
+                            --PrintChat('wcast')
                             return
                         end
                     else
-                        myHero.spellbook:CastSpell(1, self:GetCastPosition(wPred))
-                        self.LastCasts["W"] = RiotClock.time
+                        myHero.spellbook:CastSpellFast(1, self:GetCastPosition(wPred))
+                        self.LastCasts["W"] = RiotClock.time + 0.25 + NetClient.ping / 2000 + 0.07
+                        --PrintChat('wcast')
+
                         return
                     end
                 end
             end
             if self:CastQ(true) then
+                --PrintChat('qcast')
+
                 return
             end
-        elseif self.menu.q:get()  then
+        elseif self.menu.q:get() then
             if self:CastQ() then
+                --PrintChat('qcast')
                 return
             end
         end
@@ -288,13 +323,19 @@ end
 function Ezreal:OnProcessSpell(obj, spell)
     if obj == myHero then
         if spell.spellData.name == "EzrealQ" then
-            self.LastCasts.Q = os.clock()
+            --PrintChat("qproc")
+            self.LastCasts.Q = RiotClock.time + 0.25
         elseif spell.spellData.name == "EzrealW" then
-            self.LastCasts.W = os.clock()
+            --PrintChat("wproc")
+            self.LastCasts.W = RiotClock.time + 0.25
         elseif spell.spellData.name == "EzrealE" then
-            self.LastCasts.E = os.clock()
+            self.LastCasts.E = RiotClock.time + 0.75
+            --PrintChat("eproc")
+
         elseif spell.spellData.name == "EzrealR" then
-            self.LastCasts.R = os.clock()
+            self.LastCasts.R = RiotClock.time + 1
+            --PrintChat("rproc")
+
         end
     end
 end
@@ -302,12 +343,16 @@ end
 function Ezreal:OnExecuteCastFrame(obj, spell)
     if obj == myHero then
         if spell.spellData.name == "EzrealQ" then
+            --PrintChat("qexe")
             self.LastCasts.Q = nil
         elseif spell.spellData.name == "EzrealW" then
+            --PrintChat("wexe")
             self.LastCasts.W = nil
         elseif spell.spellData.name == "EzrealE" then
+            --PrintChat("eexe")
             self.LastCasts.E = nil
         elseif spell.spellData.name == "EzrealR" then
+            --PrintChat("rexe")
             self.LastCasts.R = nil
         end
     end

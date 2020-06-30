@@ -5,7 +5,7 @@ end
 local CastModeOptions = {"slow", "very slow"}
 
 local Xerath = {}
-local version = 3.61
+local version = 3.62
 
 GetInternalWebResultAsync(
     "XerathEmpyrean.version",
@@ -54,7 +54,7 @@ function Xerath:__init()
         max = 1500,
         charge = 1.5,
         range = 1500,
-        delay = 0.6,
+        delay = 0.61,
         width = 145,
         speed = math.huge,
         ignoreFilter = true
@@ -171,7 +171,7 @@ function Xerath:Menu()
     self.menu.spells:list("r", "R", 2, CastModeOptions)
 
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
-    self.menu:key("tap", "Tap Key", string.byte("T"))
+    self.menu:key("tap", "Hold to Cast R", string.byte("T"))
     self.menu:sub("xerathDraw", "Draw")
 end
 
