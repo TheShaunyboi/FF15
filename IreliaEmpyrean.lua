@@ -150,6 +150,9 @@ function Irelia:Menu()
     self.menu:key("specialE", "Force Full Range E / Force Multi E", string.byte("T"))
     self.menu:key("disableE", "Disable E1 / Cast E2 on 100% hit", 20)
     self.menu:checkbox("turret", "Enable Turret Check", true, string.byte("K"))
+    self.menu:sub("draws", "Draw")
+        self.menu.draws:checkbox("q", "Q", true)
+        self.menu.draws:checkbox("e", "E", true)
 end
 
 function Irelia:ShouldCast()
@@ -620,8 +623,12 @@ function Irelia:OnDraw()
     if self.e1Pos then
         DrawHandler:Circle3D(self.e1Pos, 50, Color.Yellow)
     end
-    DrawHandler:Circle3D(myHero.position, self.e.range, Color.White)
-    DrawHandler:Circle3D(myHero.position, 600, Color.White)
+    if self.menu.draws.q:get() and myHero.spellbook:CanUseSpell(0) == 0 then
+        DrawHandler:Circle3D(myHero.position, 600, Color.White)
+    end
+    if self.menu.draws.e:get() and myHero.spellbook:CanUseSpell(2) == 0 then
+        DrawHandler:Circle3D(myHero.position, self.e.range, Color.White)
+    end
     if myHero.spellbook:CanUseSpell(0) == 0 then
         for a, minion in ipairs(ObjectManager:GetEnemyMinions()) do
             if
