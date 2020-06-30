@@ -91,7 +91,7 @@ function Irelia:__init()
         width = 315,
         collision = {
             ["Wall"] = true,
-            ["Hero"] = true,
+            ["Hero"] = false,
             ["Minion"] = false
         }
     }
@@ -139,7 +139,7 @@ function Irelia:__init()
             self:OnDeleteObj(...)
         end
     )
-    PrintChat("Irelia loaded")
+    PrintChat("<font color=\"#1CCD00\">[<b>¤ Empyrean ¤</b>]:</font>" .. " <font color=\"#" .. "FFFFFF" .. "\">" .. "Irelia Loaded" .. "</font>")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
