@@ -2,10 +2,8 @@ if myHero.charName ~= "Xerath" then
     return
 end
 
-local CastModeOptions = {"slow", "very slow"}
-
 local Xerath = {}
-local version = 3.62
+local version = 3.71
 
 GetInternalWebResultAsync(
     "XerathEmpyrean.version",
@@ -133,20 +131,6 @@ function Xerath:__init()
             self:OnProcessSpell(...)
         end
     )
-    --[[
-    AddEvent(
-        Events.OnBuffGain,
-        function(...)
-            self:OnBuffGain(...)
-        end
-    )
-    AddEvent(
-        Events.OnBuffLost,
-        function(...)
-            self:OnBuffLost(...)
-        end
-    )
-    ]]
     PrintChat("Xerath loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
@@ -161,18 +145,10 @@ function Xerath:Menu()
         self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
         self.antiGapHeros[enemy.networkId] = true
     end
-    self.menu:sub("interrupt", "Interrupter")
-    _G.Prediction.LoadInterruptToMenu(self.menu.interrupt)
-
-    self.menu:sub("spells", "Spell cast rates")
-    self.menu.spells:list("q", "Q", 2, CastModeOptions)
-    self.menu.spells:list("w", "W", 2, CastModeOptions)
-    self.menu.spells:list("e", "E", 2, CastModeOptions)
-    self.menu.spells:list("r", "R", 2, CastModeOptions)
 
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Hold to Cast R", string.byte("T"))
-    self.menu:sub("xerathDraw", "Draw")
+    self.menu:key("forceW", "Force W before Q", string.byte("Z"))
 end
 
 function Xerath:DrawMinimapCircle(pos3d, radius, color)
@@ -201,10 +177,6 @@ function Xerath:ShouldCast()
     end
 
     return true
-end
-
-function Xerath:GetCastRate(spell)
-    return CastModeOptions[self.menu.spells[spell].value]
 end
 
 function Xerath:OnDraw()
@@ -236,10 +208,7 @@ function Xerath:CastQ(pred)
     local isQActive, remainingTime = self:IsQActive()
     if isQActive then
         return self:CastQ2(pred, isQActive and self:GetQRange(remainingTime) or self.q.max, remainingTime)
-    elseif
-        pred.rates["instant"] and GetDistanceSqr(pred.castPosition) > self.q.min * self.q.min or
-            pred.rates[self:GetCastRate("q")] and GetDistanceSqr(pred.castPosition) <= self.q.min * self.q.min
-     then
+    else
         myHero.spellbook:CastSpell(0, pred.castPosition)
         self.LastCasts.Q1 = RiotClock.time
         self:CastQ2(pred, self.q.min)
@@ -247,25 +216,12 @@ function Xerath:CastQ(pred)
     end
 end
 
-function Vector2D(pos)
-    return Vector(pos.x, pos.z)
-end
-
-function Xerath:EdgePosition(pred, target)
-    if pred.isAdjusted then
-        PrintChat("adjusted")
-    else
-        PrintChat("regular")
-    end
-    return pred.castPosition
-end
-
 function Xerath:CastQ2(pred, range, remainingTime)
     local dist = GetDistanceSqr(pred.castPosition)
     local forceCast = (remainingTime and remainingTime < .1 and pred.rates["instant"])
     local rangeAdjust = range - 100
 
-    if pred.rates[self:GetCastRate("q")] or forceCast then
+    if pred.rates["slow"] or forceCast then
         if forceCast or (pred.isMoving and not pred.targetDashing) then
             if dist > rangeAdjust * rangeAdjust then
                 return
@@ -275,7 +231,7 @@ function Xerath:CastQ2(pred, range, remainingTime)
                 return
             end
         end
-        myHero.spellbook:UpdateChargeableSpell(0, self:EdgePosition(pred), true)
+        myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
 
         pred.drawRange = range -- So debug draw shows it at the correct range rather than always self.q.max
         pred:draw()
@@ -286,7 +242,7 @@ function Xerath:CastQ2(pred, range, remainingTime)
 end
 
 function Xerath:CastW(pred)
-    if pred.rates[self:GetCastRate("w")] then
+    if pred.rates["slow"] then
         myHero.spellbook:CastSpell(SpellSlot.W, pred.castPosition)
         self.LastCasts.W = RiotClock.time
         pred:draw()
@@ -295,7 +251,7 @@ function Xerath:CastW(pred)
 end
 
 function Xerath:CastE(pred)
-    if pred.rates[self:GetCastRate("e")] then
+    if pred.rates["very slow"] then
         myHero.spellbook:CastSpell(2, pred.castPosition)
         self.LastCasts.E = RiotClock.time
         pred:draw()
@@ -338,7 +294,7 @@ function Xerath:CastR()
         end
 
         if mouseTarget and mousePred then
-            if mousePred.rates[self:GetCastRate("r")] then
+            if mousePred.rates["very slow"] then
                 myHero.spellbook:CastSpell(3, mousePred.castPosition)
                 self.LastCasts.R = RiotClock.time
                 self.r.lastTarget = mouseTarget
@@ -347,7 +303,7 @@ function Xerath:CastR()
                 return true
             end
         elseif (not self.r.mode) and allTarget and allPred then
-            if allPred.rates[self:GetCastRate("r")] then
+            if allPred.rates["very slow"] then
                 myHero.spellbook:CastSpell(3, allPred.castPosition)
                 self.LastCasts.R = RiotClock.time
                 self.r.lastTarget = allTarget
@@ -475,7 +431,10 @@ function Xerath:OnTick()
         end
     end
 
-    if myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and (ComboMode or HarassMode) then
+    if
+        myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and
+            (ComboMode and (not self.menu.forceW:get() or myHero.spellbook:CanUseSpell(SpellSlot.W) ~= 0) or HarassMode)
+     then
         self.q.range = self.q.max
 
         local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
