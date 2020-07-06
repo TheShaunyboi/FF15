@@ -311,10 +311,7 @@ function Irelia:GetQDamage(target)
 end
 
 function Irelia:CastQ(target)
-    if
-        GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and
-            not target.buffManager:HasBuff("JaxCounterStrike")
-     then
+    if GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and not target.buffManager:HasBuff("JaxCounterStrike") and not target.buffManager:HasBuff("GalioW") then
         if not self.menu.turret:get() or not self:UnderTurret(target) or self:UnderTurret(myHero) then
             myHero.spellbook:CastSpellFast(0, target.networkId)
             self.last.q = RiotClock.time
