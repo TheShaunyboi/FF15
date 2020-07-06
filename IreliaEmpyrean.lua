@@ -308,10 +308,12 @@ function Irelia:GetQDamage(target)
 end
 
 function Irelia:CastQ(target)
-    if GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible then
-        myHero.spellbook:CastSpellFast(0, target.networkId)
-        self.last.q = RiotClock.time
-        return true
+    if GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and not target.buffManager:HasBuff("JaxCounterStrike") and not target.buffManager:HasBuff("GalioW") then
+        if not self.menu.turret:get() or not self:UnderTurret(target) or self:UnderTurret(myHero) then
+            myHero.spellbook:CastSpellFast(0, target.networkId)
+            self.last.q = RiotClock.time
+            return true
+        end
     end
 end
 
@@ -337,7 +339,7 @@ function Irelia:GetBestQ()
     for _, minion in ipairs(minionsInRange) do
         local minionDist = GetDistanceSqr(minion, mousePos)
         if minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) then
-            if (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark")) and not self.menu.turret:get() or not self:UnderTurret(minion) or self:UnderTurret(myHero) then
+            if self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark") then
                 if minionDist < minDistance then
                     minDistance = minionDist
                     minDistObj = minion
@@ -349,8 +351,7 @@ function Irelia:GetBestQ()
     local enemiesInRange = self:GetTargetRange(self.qRange, true)
     for _, enemy in ipairs(enemiesInRange) do
         local enemyDist = GetDistanceSqr(enemy, mousePos)
-        if (enemy.buffManager:HasBuff("ireliamark") or self:CanKS(enemy)) and not enemy.buffManager:HasBuff("JaxCounterStrike") and not enemy.buffManager:HasBuff("SionPassiveZombie") 
-            and not enemy.buffManager:HasBuff("FioraW") and not enemy.buffManager:HasBuff("sivire") and not self.menu.turret:get() or not self:UnderTurret(enemy) or self:UnderTurret(myHero) then
+        if enemy.buffManager:HasBuff("ireliamark") or self:CanKS(enemy) then
             if enemyDist < minDistance then
                 minDistance = enemyDist
                 minDistObj = enemy
