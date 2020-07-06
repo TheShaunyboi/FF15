@@ -3,11 +3,11 @@ if myHero.charName ~= "Irelia" then
 end
 
 local Irelia = {}
-local version = 1
+local version = 1.1
 local passiveBaseScale = {15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66}
 local sheenTimer = os.clock()
 
---[[ GetInternalWebResultAsync(
+GetInternalWebResultAsync(
     "IreliaEmpyrean.version",
     function(v)
         if tonumber(v) > version then
@@ -22,7 +22,8 @@ local sheenTimer = os.clock()
             )
         end
     end
-) ]]
+)
+
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
@@ -55,6 +56,7 @@ function Irelia:__init()
         e2 = nil,
         r = nil
     }
+    self.objTracker = {}
     self.e1Pos = nil
     self.e = {
         type = "linear",
@@ -139,23 +141,24 @@ function Irelia:__init()
             self:OnDeleteObj(...)
         end
     )
-    PrintChat("<font color=\"#1CCD00\">[<b>¤ Empyrean ¤</b>]:</font>" .. " <font color=\"#" .. "FFFFFF" .. "\">" .. "Irelia Loaded" .. "</font>")
+    PrintChat(
+        '<font color="#1CCD00">[<b>¤ Empyrean ¤</b>]:</font>' ..
+            ' <font color="#' .. "FFFFFF" .. '">' .. "Irelia Loaded" .. "</font>"
+    )
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
 function Irelia:Menu()
-    self.menu = Menu("IreliaEmpyrean", "Irelia - Empyrean")
+    self.menu = Menu("IreliaEmpyrean", "Irelia - Empyrean v. " .. version)
     self.menu:sub("dreamTs", "Target Selector")
-    self.menu:slider("e1Range", "Isolated E1 range", 0, self.e.range, 450)
+    self.menu:slider("e1Range", "Isolated E1 range", 0, self.e.range, 450):tooltip("Limit E1 when isolated so you don't waste stuns")
     self.menu:key("manual", "Semi-Manual R Aim", string.byte("Z"))
-    self.menu:key("specialE", "Force Full Range E / Force Multi E", string.byte("T"))
-    self.menu:key("disableE", "Disable E1 / Cast E2 on 100% hit", 20)
+    self.menu:key("specialE", "E Modifier", string.byte("T")):tooltip("Force Full Range E / Force Multi E")
+    self.menu:key("disableE", "Disable E", 20):tooltip("E1 disabled, E2 casts only when guaranteed")
     self.menu:checkbox("turret", "Enable Turret Check", true, string.byte("K"))
     self.menu:sub("draws", "Draw")
-        self.menu.draws:checkbox("q", "Q", true)
-        self.menu.draws:checkbox("e", "E", true)
-    self.menu:label("version", "Version: " .. version .. "")
-    self.menu:label("author", "Author: Asdf & Coozbie")
+    self.menu.draws:checkbox("q", "Q", true)
+    self.menu.draws:checkbox("e", "E", true)
 end
 
 function Irelia:ShouldCast()
@@ -308,10 +311,15 @@ function Irelia:GetQDamage(target)
 end
 
 function Irelia:CastQ(target)
-    if GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible then
-        myHero.spellbook:CastSpellFast(0, target.networkId)
-        self.last.q = RiotClock.time
-        return true
+    if
+        GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and
+            not target.buffManager:HasBuff("JaxCounterStrike")
+     then
+        if not self.menu.turret:get() or not self:UnderTurret(target) or self:UnderTurret(myHero) then
+            myHero.spellbook:CastSpellFast(0, target.networkId)
+            self.last.q = RiotClock.time
+            return true
+        end
     end
 end
 
@@ -337,7 +345,7 @@ function Irelia:GetBestQ()
     for _, minion in ipairs(minionsInRange) do
         local minionDist = GetDistanceSqr(minion, mousePos)
         if minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) then
-            if (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark")) and not self.menu.turret:get() or not self:UnderTurret(minion) or self:UnderTurret(myHero) then
+            if self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark") then
                 if minionDist < minDistance then
                     minDistance = minionDist
                     minDistObj = minion
@@ -349,8 +357,7 @@ function Irelia:GetBestQ()
     local enemiesInRange = self:GetTargetRange(self.qRange, true)
     for _, enemy in ipairs(enemiesInRange) do
         local enemyDist = GetDistanceSqr(enemy, mousePos)
-        if (enemy.buffManager:HasBuff("ireliamark") or self:CanKS(enemy)) and not enemy.buffManager:HasBuff("JaxCounterStrike") and not enemy.buffManager:HasBuff("SionPassiveZombie") 
-            and not enemy.buffManager:HasBuff("FioraW") and not enemy.buffManager:HasBuff("sivire") and not self.menu.turret:get() or not self:UnderTurret(enemy) or self:UnderTurret(myHero) then
+        if enemy.buffManager:HasBuff("ireliamark") or self:CanKS(enemy) then
             if enemyDist < minDistance then
                 minDistance = enemyDist
                 minDistObj = enemy
@@ -619,9 +626,6 @@ function Irelia:CastR()
 end
 
 function Irelia:OnDraw()
-    if self.e1Pos then
-        DrawHandler:Circle3D(self.e1Pos, 50, Color.Yellow)
-    end
     if self.menu.draws.q:get() and myHero.spellbook:CanUseSpell(0) == 0 then
         DrawHandler:Circle3D(myHero.position, 600, Color.White)
     end
@@ -644,8 +648,9 @@ function Irelia:OnDraw()
     end
     local text =
         (self.menu.specialE:get() and "E Modifier on" or "E Modifier off") ..
-        "\n" .. (self.menu.disableE:get() and "Disable E on" or "Disable E off") .. 
-        "\n" .. (self.menu.turret:get() and "Turret check on" or "Turret check off")
+        "\n" ..
+            (self.menu.disableE:get() and "Disable E on" or "Disable E off") ..
+                "\n" .. (self.menu.turret:get() and "Turret check on" or "Turret check off")
 
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
@@ -704,7 +709,7 @@ function Irelia:OnProcessSpell(obj, spell)
     end
     if obj ~= nil and spell ~= nil and obj ~= myHero and obj.team ~= myHero.team then
         if spell.spellData.name == "VeigarEventHorizon" then
-            self.cage = D3DXVECTOR3(spell.endPos.x, myHero.y, spell.endPos.z)
+            self.cage = spell.endPos
         end
     end
 end
@@ -716,11 +721,11 @@ function Irelia:OnCreateObj(obj)
     if obj.name == "Blade" then
         self.e1Pos = obj.position
     end
-    if obj and GetDistance(obj) < 300 and obj.name:find("Glow_buf") then
+    if obj and GetDistanceSqr(obj) < 90000 and obj.name:find("Glow_buf") then
         sheenTimer = os.clock() + 1.7
     end
     if obj.name:lower():find("cage_green") then
-        self.cage = obj
+        self.cage = obj.position
     end
 end
 
