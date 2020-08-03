@@ -3,7 +3,7 @@ if myHero.charName ~= "Xerath" then
 end
 
 local Xerath = {}
-local version = 3.71
+local version = 3.75
 
 GetInternalWebResultAsync(
     "XerathEmpyrean.version",
@@ -28,19 +28,21 @@ local DreamTS = require("DreamTS")
 local Orbwalker = require("FF15OL")
 local Vector
 
+local dependencies =
+{
+    {"DreamPred", _G.PaidScript.DREAM_PRED, function() return _G.Prediction end},
+    {"LegitOrb", _G.PaidScript.REBORN_ORB, function() return _G.LegitOrbwalker end}
+}
+
 function OnLoad()
-    if not _G.Prediction then
-        _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
-    end
+    _G.LoadDependenciesAsync(dependencies, function(success)
+        if success then
+            Vector = _G.Prediction.Vector
 
-    if not _G.AuroraOrb and not _G.LegitOrbwalker then
-        LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
-    end
-
-    Vector = _G.Prediction.Vector
-
-    Orbwalker:Setup()
-    Xerath:__init()
+            Orbwalker:Setup()
+            Xerath:__init()
+        end
+    end)
 end
 
 function Xerath:__init()
@@ -217,20 +219,28 @@ function Xerath:CastQ(pred)
 end
 
 function Xerath:CastQ2(pred, range, remainingTime)
-    local dist = GetDistanceSqr(pred.castPosition)
-    local forceCast = (remainingTime and remainingTime < .1 and pred.rates["instant"])
-    local rangeAdjust = range - 100
+    local dist = GetDistance(pred.castPosition)
+    local forceCast = (remainingTime and remainingTime < .25 and pred.rates["instant"])
+    local max_moving_targ_dist = range - 100
+    local min_q_range_nonmoving = dist + 100
 
     if pred.rates["slow"] or forceCast then
-        if forceCast or (pred.isMoving and not pred.targetDashing) then
-            if dist > rangeAdjust * rangeAdjust then
-                return
+        if not pred.targetDashing and not pred.isImmobile and not forceCast then
+            if pred.isMoving then
+                if dist > max_moving_targ_dist then
+                    return
+                end
+            else
+                if range < min_q_range_nonmoving then
+                    return
+                end
             end
         else
-            if dist > range * range then
+            if dist > range then
                 return
             end
         end
+
         myHero.spellbook:UpdateChargeableSpell(0, pred.castPosition, true)
 
         pred.drawRange = range -- So debug draw shows it at the correct range rather than always self.q.max
