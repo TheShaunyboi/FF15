@@ -1,5 +1,22 @@
 local Syndra = {}
-local version = 3.2
+local version = 3.3
+
+GetInternalWebResultAsync(
+    "SyndraEmpyrean.version",
+    function(v)
+        if tonumber(v) > version then
+            DownloadInternalFileAsync(
+                "SyndraEmpyrean.lua",
+                SCRIPT_PATH,
+                function(success)
+                    if success then
+                        PrintChat("Updated. Press F5")
+                    end
+                end
+            )
+        end
+    end
+)
 
 require "FF15Menu"
 require "utils"
@@ -9,6 +26,7 @@ local LineSegment = require("GeometryLib").LineSegment
 local dmgLib = require("FF15DamageLib")
 local DreamTS = require("DreamTS")
 local Orbwalker = require("FF15OL")
+local bit = require("bit")
 
 local byte, match, floor, min, max, abs, rad, huge, clock, insert, remove =
     string.byte,
@@ -23,13 +41,6 @@ local byte, match, floor, min, max, abs, rad, huge, clock, insert, remove =
     table.insert,
     table.remove
 
-local paidUsers = {
-    asdf = true,
-    Etain = true,
-    Azt = true,
-    CoachBroeki = true,
-    Bill = true
-}
 local function GetDistanceSqr(p1, p2)
     p2 = p2 or myHero
     local dx = p1.x - p2.x
@@ -42,7 +53,6 @@ function OnLoad()
         LoadPaidScript(PaidScript.DREAM_PRED)
     end
     Vector = _G.Prediction.Vector
-
     function Vector:angleBetweenFull(v1, v2)
         local p1, p2 = (-self + v1), (-self + v2)
         local theta = p1:polar() - p2:polar()
@@ -276,6 +286,7 @@ function Syndra:GetCastPosition(pred)
 end
 
 function Syndra:OnTick()
+    self:TrackWObject()
     self.myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
     self.spell.e.angle = myHero.spellbook:Spell(2).level < 5 and self.spell.e.angle1 or self.spell.e.angle2
 
@@ -539,8 +550,9 @@ function Syndra:OnDraw()
     end ]]
     local text =
         (self.menu.qe2:get() and "Long Stun On" or "Long Stun Off") ..
-        "\n" .. (self.menu.e:get() and "Auto E: On" or "Auto E: Off") ..
-        "\n" .. (self.menu.r.enabled:get() and "Use R: On" or "Use R: Off")
+        "\n" ..
+            (self.menu.e:get() and "Auto E: On" or "Auto E: Off") ..
+                "\n" .. (self.menu.r.enabled:get() and "Use R: On" or "Use R: Off")
 
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
     --[[     if self.qTarget then
@@ -556,6 +568,42 @@ function Syndra:OnDraw()
             DrawHandler:Line(startPos, endPos, Color.SkyBlue)
         end
     end ]]
+end
+
+function Syndra:TrackWObject()
+    if not self.spell.w.heldInfo and myHero.buffManager:HasBuff("syndrawtooltip") then
+        local minions = ObjectManager:GetEnemyMinions()
+        for i = 1, #minions do
+            local minion = minions[i]
+            if minion and not minion.isDead then
+                local buffs = minion.buffManager.buffs
+                for i = 1, #buffs do
+                    local buff = buffs[i]
+                    if buff.name == "syndrawbuff" and buff.remainingTime > 0 then
+                        self.spell.w.heldInfo = {obj = minion, isOrb = false}
+                        return
+                    end
+                end
+            end
+        end
+        for i in ipairs(self.orbs) do
+            local orb = self.orbs[i]
+            if orb.isInitialized then
+                if
+                    bit.band(orb.obj.characterActionState, GameObjectCharacterState.Asleep) ==
+                        GameObjectCharacterState.Asleep
+                 then
+                    self.spell.w.heldInfo = {obj = orb.obj, isOrb = true}
+                    orb.endT = clock() + 6.25
+                    self.spell.e.blacklist[orb.obj] = {
+                        pos = orb.obj.position,
+                        time = clock() + 0.06
+                    }
+                    return
+                end
+            end
+        end
+    end
 end
 
 function Syndra:WaitToInitialize()
@@ -1301,51 +1349,7 @@ function Syndra:OnCreateObj(obj)
         end
     end
     if match(obj.name, "Syndra") then
-        if match(obj.name, "heldTarget_buf_02") then
-            self.spell.w.heldInfo = nil
-            local minions = ObjectManager:GetEnemyMinions()
-            local maxObj = nil
-            local maxTime = 0
-            for i = 1, #minions do
-                local minion = minions[i]
-                if minion and not minion.isDead then
-                    local buffs = minion.buffManager.buffs
-                    for i = 1, #buffs do
-                        local buff = buffs[i]
-                        if buff.name == "syndrawbuff" and maxTime < buff.remainingTime then
-                            maxObj = minion
-                            maxTime = buff.remainingTime
-                        end
-                    end
-                end
-            end
-            if maxObj then
-                self.spell.w.heldInfo = {obj = maxObj, isOrb = false}
-            end
-            if not self.spell.w.heldInfo then
-                local lowestDist = 10000 * 1000
-                local idx = 0
-                for i in ipairs(self.orbs) do
-                    local orb = self.orbs[i]
-                    if orb.isInitialized then
-                        local dist = GetDistanceSqr(obj.position, orb.obj.position)
-                        if dist <= lowestDist then
-                            lowestDist = dist
-                            idx = i
-                        end
-                    end
-                end
-                if idx then
-                    self.spell.w.heldInfo = {obj = self.orbs[idx].obj, isOrb = true}
-                    self.orbs[idx].endT = clock() + 6.25
-                    self.spell.e.blacklist[self.orbs[idx].obj] = {
-                        pos = self.orbs[idx].obj.position,
-                        time = clock() + 0.06
-                    }
-                end
-            end
-        end
-        if
+        if 
             match(obj.name, "Q_tar_sound") or
                 match(obj.name, "W_tar") and
                     myHero.buffManager:HasBuff("ASSETS/Perks/Styles/Domination/Electrocute/Electrocute.lua")
@@ -1408,6 +1412,7 @@ function Syndra:OnDeleteObj(obj)
     end
 end
 
+
 function Syndra:OnBuffLost(obj, buff)
     if obj == myHero then
         if buff.name == "syndrawtooltip" then
@@ -1457,6 +1462,15 @@ function Syndra:OnProcessSpell(obj, spell)
             self.timer = clock() + 0.15
         end
     end
+end
+
+function Syndra:OnPlayAnimation(source, name)
+    --[[     if name ~= "Idle1" then
+        print(name)
+    end
+    if name == "Spell2_pull" then
+        print(source.charName)
+    end ]]
 end
 
 function Syndra:OnExecuteCastFrame(obj, spell)
