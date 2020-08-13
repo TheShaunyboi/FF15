@@ -1,33 +1,18 @@
 # FF15
 
-## Supported Champions
-### Ezreal
-* Uses Dream TS
-* Auto Q
-* Prioritize W buff target
-* Manual ult
-* Ult on CC
-* Ult on 3+ enemies hit
-
-### Kai'Sa
-* Auto Q
-* W if near mouse, in AA range, or CCed
-
+## Showcase
 ### Syndra
-* Uses Dream TS
-* Proper QE short support
-* W1 grabs oldest orb or else lowest health minion
-* Variable W2 prediction based on grabbed target
-* Proper WE support
-* E orb pingpong
-* Anti-gapcloser WE/QE
-* Tracks orbs pre initialization
-* Advanced ult logic with 8 customizable checks and ignite support
-* Auto grab Annie / Ivern ults
+* Video:
+[![Watch the video](https://img.youtube.com/vi/C7hO7-VuGks/maxresdefault.jpg)](https://youtu.be/C7hO7-VuGks)
 
-### Xerath
-* Uses Dream TS
-* Separate prediction for W center
-* Anti-gapcloser E
-* R minimap drawings
-* R on tap with near mouse prioritity
+* Uses Dream TS with stasis prediction
+* AOE conic prediction algorithm to hit as many balls as possible
+* Precise calculations for QE and WE knockback
+* Auto E ping pong balls
+* Perfect tracking of balls + tracking pre initialization
+
+### Evade
+![evade](https://i.giphy.com/media/QAyGrcc2V1dZweBpkV/giphy.webp)
+* A star pathfinding to mouse pos 
+* Accurate path danger calculations
+* Support for every spell type
