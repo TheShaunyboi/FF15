@@ -1,31 +1,29 @@
-local Syndra = {}
-local version = 3.3
+local function class()
+    return setmetatable(
+        {},
+        {
+            __call = function(self, ...)
+                local result = setmetatable({}, {__index = self})
+                result:__init(...)
 
-GetInternalWebResultAsync(
-    "SyndraEmpyrean.version",
-    function(v)
-        if tonumber(v) > version then
-            DownloadInternalFileAsync(
-                "SyndraEmpyrean.lua",
-                SCRIPT_PATH,
-                function(success)
-                    if success then
-                        PrintChat("Updated. Press F5")
-                    end
-                end
-            )
-        end
-    end
-)
+                return result
+            end
+        }
+    )
+end
+
+local Syndra = class()
+Syndra.version = 3.4
 
 require "FF15Menu"
 require "utils"
 
 local Vector
+
 local LineSegment = require("GeometryLib").LineSegment
 local dmgLib = require("FF15DamageLib")
 local DreamTS = require("DreamTS")
-local Orbwalker = require("FF15OL")
+local Orbwalker = require("ModernUOL")
 local bit = require("bit")
 
 local byte, match, floor, min, max, abs, rad, huge, clock, insert, remove =
@@ -48,10 +46,8 @@ local function GetDistanceSqr(p1, p2)
     return dx * dx + dz * dz
 end
 
-function OnLoad()
-    if not _G.Prediction then
-        LoadPaidScript(PaidScript.DREAM_PRED)
-    end
+
+function Syndra:__init()
     Vector = _G.Prediction.Vector
     function Vector:angleBetweenFull(v1, v2)
         local p1, p2 = (-self + v1), (-self + v2)
@@ -61,10 +57,6 @@ function OnLoad()
         end
         return theta
     end
-end
-
-function Syndra:init()
-    self.orbSetup = false
     self.unitsInRange = {}
     self.enemyHeroes = ObjectManager:GetEnemyHeroes()
     self.allyHeroes = ObjectManager:GetAllyHeroes()
@@ -74,7 +66,7 @@ function Syndra:init()
             range = 800,
             rangeSqr = 800 * 800,
             delay = 0.65,
-            radius = 200,
+            radius = 210,
             speed = huge
         },
         w = {
@@ -246,12 +238,12 @@ function Syndra:init()
         end
     )
 
-    PrintChat("Thank you for supporting Syndra - Empyrean")
+    PrintChat("Syndra loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
 function Syndra:Menu()
-    self.menu = Menu("SyndraEmpyrean", "Syndra - Empyrean v" .. version)
+    self.menu = Menu("SyndraEmpyrean", "Syndra - Empyrean v" .. self.version)
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("qe2", "Use Long Stun", true, byte("Z"))
     self.menu:checkbox("e", "AutoE", true, byte("T"))
@@ -289,11 +281,6 @@ function Syndra:OnTick()
     self:TrackWObject()
     self.myHeroPred = _G.Prediction.GetUnitPosition(myHero, NetClient.ping / 2000 + 0.06)
     self.spell.e.angle = myHero.spellbook:Spell(2).level < 5 and self.spell.e.angle1 or self.spell.e.angle2
-
-    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
-        Orbwalker:Setup()
-        self.orbSetup = true
-    end
 
     if self.spell.w.blacklist2 and clock() >= self.spell.w.blacklist2.time + 0.8 then
         self.spell.w.blacklist2 = nil
@@ -341,7 +328,7 @@ function Syndra:OnTick()
         end
     end
 
-    if self:ShouldCast() and self.orbSetup then
+    if self:ShouldCast() then
         self:Combo()
     end
 end
@@ -1349,7 +1336,7 @@ function Syndra:OnCreateObj(obj)
         end
     end
     if match(obj.name, "Syndra") then
-        if 
+        if
             match(obj.name, "Q_tar_sound") or
                 match(obj.name, "W_tar") and
                     myHero.buffManager:HasBuff("ASSETS/Perks/Styles/Domination/Electrocute/Electrocute.lua")
@@ -1411,7 +1398,6 @@ function Syndra:OnDeleteObj(obj)
         end
     end
 end
-
 
 function Syndra:OnBuffLost(obj, buff)
     if obj == myHero then
@@ -1514,10 +1500,4 @@ function Syndra:GetTotalAp()
         myHero.characterIntermediate.flatMagicDamageMod * (1 + myHero.characterIntermediate.percentMagicDamageMod)
 end
 
-if myHero.charName == "Syndra" then
-    if true then
-        Syndra:init()
-    else
-        PrintChat("No subscription found. Please purchase in order to use the script.")
-    end
-end
+return Syndra

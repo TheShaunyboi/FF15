@@ -1,59 +1,36 @@
-if myHero.charName ~= "Xerath" then
-    return
+local function class()
+    return setmetatable(
+        {},
+        {
+            __call = function(self, ...)
+                local result = setmetatable({}, {__index = self})
+                result:__init(...)
+
+                return result
+            end
+        }
+    )
 end
 
-local Xerath = {}
-local version = 3.75
+local Xerath = class()
+Xerath.version = 3.82
 
-GetInternalWebResultAsync(
-    "XerathEmpyrean.version",
-    function(v)
-        if tonumber(v) > version then
-            DownloadInternalFileAsync(
-                "XerathEmpyrean.lua",
-                SCRIPT_PATH,
-                function(success)
-                    if success then
-                        PrintChat("Updated. Press F5")
-                    end
-                end
-            )
-        end
-    end
-)
 
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
-local Orbwalker = require("FF15OL")
-local Vector
-
-local dependencies =
-{
-    {"DreamPred", _G.PaidScript.DREAM_PRED, function() return _G.Prediction end},
-    {"LegitOrb", _G.PaidScript.REBORN_ORB, function() return _G.LegitOrbwalker end}
-}
-
-function OnLoad()
-    _G.LoadDependenciesAsync(dependencies, function(success)
-        if success then
-            Vector = _G.Prediction.Vector
-
-            Orbwalker:Setup()
-            Xerath:__init()
-        end
-    end)
-end
+local Orbwalker = require("ModernUOL")
+local Vector = require("GeometryLib").Vector
 
 function Xerath:__init()
     self.active_buffs = {}
     self.q = {
         type = "linear",
         last = nil,
-        min = 750,
-        max = 1500,
+        min = 700,
+        max = 1450,
         charge = 1.5,
-        range = 1500,
+        range = 1450,
         delay = 0.61,
         width = 145,
         speed = math.huge,
@@ -63,14 +40,14 @@ function Xerath:__init()
         type = "circular",
         range = 1000,
         delay = 0.83,
-        radius = 270,
+        radius = 275,
         speed = math.huge
     }
     self.e = {
         type = "linear",
         range = 1000,
         delay = 0.25,
-        width = 125,
+        width = 120,
         speed = 1400,
         collision = {
             ["Wall"] = true,
@@ -138,7 +115,7 @@ function Xerath:__init()
 end
 
 function Xerath:Menu()
-    self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean")
+    self.menu = Menu("XerathEmpyrean", "Xerath - Empyrean v" .. self.version)
 
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("antigap", "Anti Gapclose")
@@ -150,7 +127,7 @@ function Xerath:Menu()
 
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
     self.menu:key("tap", "Hold to Cast R", string.byte("T"))
-    self.menu:key("forceW", "Force W before Q", string.byte("Z"))
+    self.menu:key("flee", "Flee key (use E only)", string.byte("Z"))
 end
 
 function Xerath:DrawMinimapCircle(pos3d, radius, color)
@@ -261,7 +238,7 @@ function Xerath:CastW(pred)
 end
 
 function Xerath:CastE(pred)
-    if pred.rates["very slow"] then
+    if pred.rates["slow"] then
         myHero.spellbook:CastSpell(2, pred.castPosition)
         self.LastCasts.E = RiotClock.time
         pred:draw()
@@ -288,7 +265,6 @@ function Xerath:CastR()
             self.TS:GetTarget(
             self.r,
             myHero,
-            nil,
             function(unit)
                 return GetDistanceSqr(pwHud.hudManager.virtualCursorPos, unit) <= maxRangeSqr
             end
@@ -384,9 +360,19 @@ function Xerath:OnTick()
 
     local ComboMode = Orbwalker:GetMode() == "Combo"
     local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
+    local shouldCast = self:ShouldCast()
+    local eValid = false
+
+    if self.menu.flee:get() then
+        self:MoveToMouse()
+    end
+    local q = myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0
+    local w = myHero.spellbook:CanUseSpell(SpellSlot.W) == 0
+    local notW = myHero.spellbook:CanUseSpell(SpellSlot.W) ~= 0
+    local e = myHero.spellbook:CanUseSpell(SpellSlot.E) == 0
 
     -- Will waste pred calls without these conditions as well as call Cast when can't cast
-    if not qActive and self:ShouldCast() then
+    if not qActive and shouldCast then
         if rActive then
             if self:CastTrinket() or self:CastR() then
                 return
@@ -394,8 +380,7 @@ function Xerath:OnTick()
         else
             self.r.lastTarget = nil
             self.r.mode = nil
-
-            if myHero.spellbook:CanUseSpell(SpellSlot.E) == 0 then
+            if e then
                 local e_targets, e_preds =
                     self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
 
@@ -403,6 +388,9 @@ function Xerath:OnTick()
                     local unit = e_targets[i]
                     local pred = e_preds[unit.networkId]
                     if pred then
+                        if ComboMode then
+                            eValid = true
+                        end
                         if
                             pred.targetDashing and self.antiGapHeros[unit.networkId] and
                                 self.menu.antigap[unit.charName]:get() and
@@ -416,7 +404,7 @@ function Xerath:OnTick()
                     end
                 end
 
-                if ComboMode then
+                if ComboMode or self.menu.flee:get() then
                     local target = e_targets[1]
                     if target then
                         local pred = e_preds[target.networkId]
@@ -432,19 +420,27 @@ function Xerath:OnTick()
                 end
             end
 
-            if myHero.spellbook:CanUseSpell(SpellSlot.W) == 0 and ComboMode then
-                local w_target, w_pred = self.TS:GetTarget(self.w, myHero, InComboRangeCallback)
-                if w_target and w_pred and self:CastW(w_pred) then
-                    return
+            if w then
+                local w_targets, w_preds = self.TS:GetTargets(self.w, myHero, InComboRangeCallback)
+                for i = 1, #w_targets do
+                    local unit = w_targets[i]
+                    local pred = w_preds[unit.networkId]
+                    if pred then
+                        if
+                            (ComboMode or HarassMode or
+                                (pred.targetDashing and self.antiGapHeros[unit.networkId] and
+                                    self.menu.antigap[unit.charName]:get())) and
+                                self:CastW(pred)
+                         then
+                            return
+                        end
+                    end
                 end
             end
         end
     end
 
-    if
-        myHero.spellbook:CanUseSpell(SpellSlot.Q) == 0 and self:ShouldCast() and
-            (ComboMode and (not self.menu.forceW:get() or myHero.spellbook:CanUseSpell(SpellSlot.W) ~= 0) or HarassMode)
-     then
+    if q and not eValid and shouldCast and (ComboMode or (HarassMode and notW)) then
         self.q.range = self.q.max
 
         local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
@@ -526,3 +522,10 @@ function Xerath:GetQRange(remainingTime)
         self.q.max
     )
 end
+
+function Xerath:MoveToMouse()
+    local pos = pwHud.hudManager.virtualCursorPos
+    myHero:IssueOrder(GameObjectOrder.MoveTo, pos)
+end
+
+return Xerath

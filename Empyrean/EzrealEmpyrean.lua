@@ -1,40 +1,31 @@
-local Ezreal = {}
-local version = 3
+local function class()
+    return setmetatable(
+        {},
+        {
+            __call = function(self, ...)
+                local result = setmetatable({}, {__index = self})
+                result:__init(...)
 
-GetInternalWebResultAsync(
-    "asdfezreal.version",
-    function(v)
-        if tonumber(v) > version then
-            DownloadInternalFileAsync(
-                "asdfezreal.lua",
-                SCRIPT_PATH,
-                function(success)
-                    if success then
-                        --PrintChat("Updated. Press F5")
-                    end
-                end
-            )
-        end
-    end
-)
+                return result
+            end
+        }
+    )
+end
+
+local Ezreal = class()
+Ezreal.version = 3.02
+
 require "FF15Menu"
 require "utils"
 local DreamTS = require("DreamTS")
 local dmgLib = require("FF15DamageLib")
-local Orbwalker = require "FF15OL"
-
-function OnLoad()
-    if not _G.Prediction then
-        LoadPaidScript(PaidScript.DREAM_PRED)
-    end
-end
+local Orbwalker = require "ModernUOL"
 
 function Ezreal:__init()
     self.turrets = {}
     for i, turret in pairs(ObjectManager:GetEnemyTurrets()) do
         self.turrets[turret.networkId] = {object = turret, range = 775 + 25}
     end
-    self.orbSetup = false
     self.q = {
         type = "linear",
         speed = 2000,
@@ -103,7 +94,7 @@ function Ezreal:__init()
         function(obj, buff)
             self:OnBuffGain(obj, buff)
         end
-    ) 
+    )
     AddEvent(
         Events.OnBuffLost,
         function(obj, buff)
@@ -128,12 +119,12 @@ function Ezreal:__init()
             self:OnDeleteObject(obj)
         end
     )
-    --PrintChat("Ezreal loaded")
+    PrintChat("Ezreal loaded")
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
 
 function Ezreal:Menu()
-    self.menu = Menu("asdfezreal", "Ezreal")
+    self.menu = Menu("EzrealEmpyrean", "Ezreal - Empyrean v" .. self.version)
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("w", "Check W for AA or possible Q ", true)
     self.menu:checkbox("q", "AutoQ", true, string.byte("T"))
@@ -142,11 +133,7 @@ function Ezreal:Menu()
 end
 
 function Ezreal:OnDraw()
-    DrawHandler:Circle3D(
-        myHero.position,
-        self.q.range,
-        (self.orbSetup and Orbwalker:GetMode() == "Combo") and Color.Red or Color.White
-    )
+    DrawHandler:Circle3D(myHero.position, self.q.range, Orbwalker:GetMode() == "Combo" and Color.Red or Color.White)
     local text = self.menu.q:get() and "AutoQ on" or "AutoQ off"
     DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
 end
@@ -168,7 +155,9 @@ function Ezreal:DynamicRange(pred, target, spell)
         return true
     end
     if
-        distToPosition + (distToPosition - distToCast) * (pred.interceptionTime - spell.delay - NetClient.ping / 2000 - 0.07) / pred.interceptionTime <
+        distToPosition +
+            (distToPosition - distToCast) * (pred.interceptionTime - spell.delay - NetClient.ping / 2000 - 0.07) /
+                pred.interceptionTime <
             spell.range
      then
         return true
@@ -219,14 +208,7 @@ function Ezreal:CastQ(isCombo)
 end
 
 function Ezreal:OnTick()
-    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
-        Orbwalker:Setup()
-        self.orbSetup = true
-    end
-    if
-        self.orbSetup and not Orbwalker:IsAttacking() and
-            not (_G.JustEvade and _G.JustEvade.Loaded() and _G.JustEvade.Evading()) and self:ShouldCast()
-     then
+    if not Orbwalker:IsAttacking() and self:ShouldCast() then
         if self.menu.r:get() and myHero.spellbook:CanUseSpell(3) == 0 then
             local rTarget, rPred = self:GetTarget(self.r)
             if rTarget and rPred and rPred.rates["slow"] then
@@ -293,14 +275,14 @@ end
 function Ezreal:OnBuffGain(obj, buff)
     if obj and obj.team ~= myHero.team and obj.type == myHero.type and buff.name == "ezrealwattach" then
         self.wBuffTarget = obj
-        Orbwalker:ForceTarget(obj)
+        Orbwalker:SetTarget(obj)
     end
 end
 
 function Ezreal:OnBuffLost(obj, buff)
     if obj and obj.team ~= myHero.team and obj.type == myHero.type and buff.name == "ezrealwattach" then
         self.wBuffTarget = nil
-        Orbwalker:ResetForcedTarget()
+        Orbwalker:UnSetTarget()
     end
 end
 
@@ -329,13 +311,11 @@ function Ezreal:OnProcessSpell(obj, spell)
             --PrintChat("wproc")
             self.LastCasts.W = RiotClock.time + 0.25
         elseif spell.spellData.name == "EzrealE" then
-            self.LastCasts.E = RiotClock.time + 0.75
             --PrintChat("eproc")
-
+            self.LastCasts.E = RiotClock.time + 0.75
         elseif spell.spellData.name == "EzrealR" then
             self.LastCasts.R = RiotClock.time + 1
-            --PrintChat("rproc")
-
+        --PrintChat("rproc")
         end
     end
 end
@@ -364,6 +344,4 @@ function Ezreal:OnDeleteObject(obj)
     end
 end
 
-if myHero.charName == "Ezreal" then
-    Ezreal:__init()
-end
+return Ezreal

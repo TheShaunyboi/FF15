@@ -1,34 +1,26 @@
-local Kaisa = {}
-local version = 1.91
-GetInternalWebResultAsync(
-    "asdfkaisa.version",
-    function(v)
-        if tonumber(v) > version then
-            DownloadInternalFileAsync(
-                "asdfkaisa.lua",
-                SCRIPT_PATH,
-                function(success)
-                    if success then
-                        PrintChat("Updated. Press F5")
-                    end
-                end
-            )
-        end
-    end
-)
-require "FF15Menu"
-require "utils"
-local Orbwalker = require "FF15OL"
-local DreamTS = require("DreamTS")
+local function class()
+    return setmetatable(
+        {},
+        {
+            __call = function(self, ...)
+                local result = setmetatable({}, {__index = self})
+                result:__init(...)
 
-function OnLoad()
-    if not _G.Prediction then
-        LoadPaidScript(PaidScript.DREAM_PRED)
-    end
+                return result
+            end
+        }
+    )
 end
 
+
+local Kaisa = class()
+Kaisa.version = 1.92
+require "FF15Menu"
+require "utils"
+local Orbwalker = require "ModernUOL"
+local DreamTS = require("DreamTS")
+
 function Kaisa:__init()
-    self.orbSetup = false
     self.qRange = 600
     self.w = {
         searchRange = 400,
@@ -107,7 +99,7 @@ function Kaisa:__init()
 end
 
 function Kaisa:Menu()
-    self.menu = Menu("asdfkaisa", "Kaisa")
+    self.menu = Menu("KaisaEmpyrean", "Kaisa - Empyrean v" .. self.version)
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("q", "AutoQ", true, 0x54)
 end
@@ -181,11 +173,7 @@ function Kaisa:ShouldCast()
 end
 
 function Kaisa:OnTick()
-    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
-        Orbwalker:Setup()
-        self.orbSetup = true
-    end
-    if self.orbSetup and self:ShouldCast() then
+    if self:ShouldCast() then
         if self.menu.q:get() then
             self:CastQ()
         end
@@ -244,10 +232,4 @@ function Kaisa:GetTarget(spell, all, targetFilter, predFilter)
     end
 end
 
-function Kaisa:Hex(a, r, g, b)
-    return string.format("0x%.2X%.2X%.2X%.2X", a, r, g, b)
-end
-
-if myHero.charName == "Kaisa" then
-    Kaisa:__init()
-end
+return Kaisa
