@@ -12,9 +12,8 @@ local function class()
     )
 end
 
-
 local Kaisa = class()
-Kaisa.version = 1.92
+Kaisa.version = 1.93
 require "FF15Menu"
 require "utils"
 local Orbwalker = require "ModernUOL"
@@ -102,17 +101,22 @@ function Kaisa:Menu()
     self.menu = Menu("KaisaEmpyrean", "Kaisa - Empyrean v" .. self.version)
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:checkbox("q", "AutoQ", true, 0x54)
+    self.menu:checkbox("w", "Use W only near mouse", true):tooltip(
+        "Highly recommended unless playing AP Kaisa with W upgrade"
+    )
+    self.menu:checkbox("drawW", "Draw W search range", true)
 end
 
 function Kaisa:OnDraw()
-    DrawHandler:Circle3D(myHero.position, self.qRange, Color.White)
-    DrawHandler:Circle3D(pwHud.hudManager.virtualCursorPos, self.w.searchRange, Color.White)
     DrawHandler:Text(
         DrawHandler.defaultFont,
         Renderer:WorldToScreen(myHero.position),
         self.menu.q:get() and "AutoQ on" or "AutoQ off",
         Color.White
     )
+    if self.menu.drawW:get() then
+        DrawHandler:Circle3D(pwHud.hudManager.virtualCursorPos, self.w.searchRange, Color.White)
+    end
 end
 
 function Kaisa:CastQ()
@@ -149,7 +153,9 @@ function Kaisa:W()
             if GetDistanceSqr(wPred.castPosition) <= aa * aa then
                 best1 = wPred
             elseif
-                GetDistanceSqr(pwHud.hudManager.virtualCursorPos, wTarget) <= self.w.searchRange * self.w.searchRange and
+                (not self.menu.w:get() or
+                    GetDistanceSqr(pwHud.hudManager.virtualCursorPos, wTarget) <=
+                        self.w.searchRange * self.w.searchRange) and
                     wPred.rates["veryslow"]
              then
                 best2 = wPred

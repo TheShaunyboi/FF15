@@ -13,8 +13,7 @@ local function class()
 end
 
 local Lucian = class()
-Lucian.version = 1.04
-
+Lucian.version = 1.1
 
 require "FF15Menu"
 require "utils"
@@ -24,14 +23,7 @@ local Vector = require("GeometryLib").Vector
 local LineSegment = require("GeometryLib").LineSegment
 local dmgLib = require("FF15DamageLib")
 
-function OnLoad()
-    if not _G.Prediction then
-        LoadPaidScript(PaidScript.DREAM_PRED)
-    end
-end
-
 function Lucian:__init()
-    self.active_buffs = {}
     self.lastAttackInvoke = nil
     self.lastAttackExecute = RiotClock.time
     self.lastAttack = {
@@ -125,6 +117,12 @@ function Lucian:__init()
             ["Minion"] = true
         }
     }
+    self.rData = {
+        width1 = 285,
+        width2 = 150,
+        direction = Vector(myHero.position):normalized()
+    }
+    self.autoFollow = true
     self.level = RiotClock.time
     self.gapcloserDB = {
         ["Headbutt"] = {
@@ -216,11 +214,16 @@ function Lucian:Menu()
     self.menu:key("r", "Cast R to target nearest mouse", string.byte("R")):tooltip(
         "Unbind/Unsmartcast Lucian R on League and use this key to R"
     )
+    self.menu:key("autoFollow", "Turn off auto follow R", string.byte("Z"))
 end
 
 function Lucian:OnDraw()
     local hasQ = false
-
+    local buff = myHero.buffManager:HasBuff("LucianR")
+    if buff then
+        local text = "Auto follow R: " .. (self.autoFollow and "on" or "off")
+        DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
+    end
     if self.e.queue then
         hasQ = true
         DrawHandler:Circle3D(self.e.queue.pos, 30, Color.Red)
@@ -232,19 +235,35 @@ function Lucian:OnDraw()
         DrawHandler:Circle3D(myHero.position, self.menu.dashMin:get(), Color.Orange)
         DrawHandler:Circle3D(myHero.position, self.menu.dashMax:get(), Color.SkyBlue)
     end
-    local mousePos = Vector(pwHud.hudManager.virtualCursorPos)
+    --[[     local mousePos = Vector(pwHud.hudManager.virtualCursorPos)
+    local enemies = ObjectManager:GetEnemyHeroes()
+    local lowDist, lowEnemy = 10000, nil
+    for _, enemy in pairs(enemies) do
+        if GetDistance(enemy) < lowDist then
+            lowDist, lowEnemy = GetDistance(enemy), enemy
+        end
+    end
+
     local heroPos = Vector(myHero.position)
-    local endPos = heroPos:extended(mousePos, self.w.range)
-    local pos1 = heroPos:extended(mousePos, self.w.range - self.w.height)
-    local pos2 = heroPos:extended(mousePos, self.w.range + self.w.height)
-    local diff = (pos1 - endPos):rotated(0, math.pi / 2, 0)
-    local pos3 = endPos + diff
-    local pos4 = endPos - diff
-    endPos.y = myHero.position.y
-    pos1.y = myHero.position.y
-    pos2.y = myHero.position.y
-    pos3.y = myHero.position.y
-    pos4.y = myHero.position.y
+    local endPos = heroPos:extended(Vector(lowEnemy.position), self.q.range)
+    local diff = (heroPos - endPos):rotated(0, math.pi / 2, 0):normalized() * 45
+    local pos1 = Renderer:WorldToScreen((heroPos + diff):toDX3())
+    local pos2 = Renderer:WorldToScreen((heroPos - diff):toDX3())
+    local pos3 = Renderer:WorldToScreen((endPos + diff):toDX3())
+    local pos4 = Renderer:WorldToScreen((endPos - diff):toDX3())
+    DrawHandler:Line(pos1, pos3, Color.White)
+    DrawHandler:Line(pos2, pos4, Color.White)
+ ]]
+    -- local pos1 = heroPos:extended(mousePos, self.w.range - self.w.height)
+    -- local pos2 = heroPos:extended(mousePos, self.w.range + self.w.height)
+    -- local diff = (pos1 - endPos):rotated(0, math.pi / 2, 0)
+    -- local pos3 = endPos + diff
+    -- local pos4 = endPos - diff
+    -- endPos.y = myHero.position.y
+    -- pos1.y = myHero.position.y
+    -- pos2.y = myHero.position.y
+    -- pos3.y = myHero.position.y
+    -- pos4.y = myHero.position.y
 
     -- DrawHandler:Circle3D(endPos:toDX3(), 5, Color.White)
     -- DrawHandler:Circle3D(pos1:toDX3(), 5, Color.White)
@@ -327,7 +346,7 @@ function Lucian:GetQ(short)
             preds[target.networkId] and (inAA or preds[target.networkId].rates["slow"]) and
                 (not short or (inAa and not res) or canKS)
          then
-            local checkWidth = self.q.width / 2
+            local checkWidth = self.q.width * 2 / 3
             local checkSpell =
                 setmetatable(
                 {
@@ -336,7 +355,6 @@ function Lucian:GetQ(short)
                 {__index = self.q}
             )
             local checkPred = _G.Prediction.GetPrediction(target, checkSpell)
-            local predPos2 = _G.Prediction.GetUnitPosition(target, 0.06 + NetClient.ping / 2000 + self.q.delay)
             local best, closest = nil, 10000
             local best2, closest2 = nil, 10000
             if checkPred and checkPred.castPosition then
@@ -351,7 +369,7 @@ function Lucian:GetQ(short)
                         if dist < closest then
                             best, closest = minion, dist
                         end
-                        local dist2 = self:QCollision(minion, predPos2)
+                        local dist2 = self:QCollision(minion, checkPred.targetPosition)
                         if dist2 < closest2 then
                             best2, closest2 = minion, dist2
                         end
@@ -367,14 +385,14 @@ function Lucian:GetQ(short)
                         if dist < closest then
                             best, closest = target2, dist
                         end
-                        local dist2 = self:QCollision(target2, predPos2)
+                        local dist2 = self:QCollision(target2, checkPred.targetPosition)
                         if dist2 < closest2 then
                             best2, closest2 = minion, dist2
                         end
                     end
                 end
             end
-            if best and closest < checkWidth and (not res or canKS) then
+            if best and closest < checkWidth / 2 and (not res or canKS) then
                 res, enemy = best, target
             end
             if best2 and closest2 < self.q.width + target.boundingRadius and (not res or canKS) and inAa then
@@ -459,11 +477,7 @@ function Lucian:ManualE()
     local pos2 = Vector(myHero.position):extended(Vector(mousePos), self.e.minDist):toDX3()
     local pos22 = Vector(myHero.position):extended(Vector(mousePos), self.e.minDist + myHero.boundingRadius):toDX3()
     local pos23 = Vector(myHero.position):extended(Vector(mousePos), self.e.minDist + myHero.boundingRadius):toDX3()
-    if
-        (not NavMesh:IsWall(pos1) and not NavMesh:IsWall(pos12) and not NavMesh:IsWall(pos13)) or
-            (not NavMesh:IsWall(pos2) and not NavMesh:IsWall(pos22) and not NavMesh:IsWall(pos23))
-     then
-        PrintChat("casting")
+    if not NavMesh:IsWall(pos1) or not NavMesh:IsWall(pos2) then
         return self:CastE(pos1)
     end
 end
@@ -536,7 +550,7 @@ function Lucian:CastR()
     if r then
         local target, pred = self:GetTarget(self.r, false, nil, nil, self.TS.Modes["Closest To Mouse"])
         if target and pred then
-            myHero.spellbook:CastSpell(3, pred.castPosition)
+            myHero.spellbook:CastSpell(3, pred.targetPosition)
             self.last.r = RiotClock.time
             self.usedSpell = RiotClock.time
             return true
@@ -573,6 +587,51 @@ function Lucian:AntiGapcloserE()
         end
     end
     return used
+end
+
+function Lucian:AutoFollow()
+    if self.menu.autoFollow:get() then
+        self.autoFollow = false
+        return
+    end
+    local enemies, preds = self:GetTarget(self.r, true)
+    local checkSpell =
+        setmetatable(
+        {
+            width = self.rData.width1
+        },
+        {__index = self.r}
+    )
+    for _, enemy in pairs(enemies) do
+        if preds[enemy.networkId] then
+            local endPos = Vector(myHero.position) + self.rData.direction * (self.r.range + enemy.boundingRadius)
+            local col = _G.Prediction.IsCollision(checkSpell, myHero.position, endPos, enemy)
+            if col then
+                Orbwalker:BlockMove(true)
+                local ts = Vector(preds[enemy.networkId].targetPosition)
+                local seg = LineSegment(Vector(myHero.position), endPos)
+                local dist = seg:distanceTo(ts)
+                local diff = self.rData.direction:rotated(0, math.pi / 2, 0)
+                local hor = diff * dist
+                local pos1 = Vector(myHero.position) + hor
+                local pos2 = Vector(myHero.position) - hor
+                local adjustPos = pos1:distSqr(ts) > pos2:distSqr(ts) and pos2 or pos1
+                if dist <= enemy.boundingRadius + self.rData.width2 / 2 then
+                    local mousePos = Vector(pwHud.hudManager.virtualCursorPos)
+                    local verDist = math.sqrt((enemy.boundingRadius + self.rData.width2 / 2) ^ 2 - dist ^ 2)
+                    local endPos2 =
+                        Vector(myHero.position) - self.rData.direction * (self.r.range + enemy.boundingRadius)
+                    local dir = endPos:distSqr(mousePos) < endPos2:distSqr(mousePos) and 1 or -1
+                    local movePos = adjustPos + dir * self.rData.direction * verDist
+                    myHero:IssueOrder(GameObjectOrder.MoveTo, movePos:toDX3())
+                else
+                    myHero:IssueOrder(GameObjectOrder.MoveTo, adjustPos:toDX3())
+                end
+                return
+            end
+        end
+    end
+    Orbwalker:BlockMove(false)
 end
 
 function Lucian:OnTick()
@@ -619,6 +678,12 @@ function Lucian:OnTick()
         return
     end
     self.lastCalled = "checkpoint2"
+    local buff = myHero.buffManager:HasBuff("LucianR")
+    if buff and self.autoFollow then
+        self:AutoFollow()
+    else
+        Orbwalker:BlockMove(false)
+    end
     if self:ShouldCast() then
         self.lastCalled = "checkpoint3"
         if self.menu.manualE:get() and RiotClock.time > 0.25 + self.level and self:ManualE() then
@@ -666,7 +731,7 @@ function Lucian:Combo()
     end
     local wPos = self:GetW(myHero.position)
     local wInRange = false
-    if wPos and GetDistanceSqr(wPos) < 500 ^ 2 then
+    if wPos and GetDistanceSqr(wPos) < 450 ^ 2 then
         wInRange = true
     end
     local qTime = RiotClock.time < self.lastAttack.time + myHero.attackDelay - myHero.attackCastDelay - self.q.delay
@@ -686,18 +751,25 @@ function Lucian:Combo()
                 return
             end
         end
-        self.lastCalled = "checkpoint10"
-        if q and (qTime or self.lastAttackExecute) and qInRange and self:CastQ(aim) then
-            return
-        end
-        self.lastCalled = "checkpoint11"
-        if w and (wTime or self.lastAttackExecute) and wPos and self:CastW(wPos) then
+        if w and wInRange and (wTime or self.lastAttackExecute) and wPos and self:CastW(wPos) then
             return
         end
         self.lastCalled = "checkpoint12"
         if q and (qTime or self.lastAttackExecute) and aim and self:CastQ(aim) then
             return
         end
+        -- self.lastCalled = "checkpoint10"
+        -- if q and (qTime or self.lastAttackExecute) and qInRange and self:CastQ(aim) then
+        --     return
+        -- end
+        self.lastCalled = "checkpoint11"
+        if w and (wTime or self.lastAttackExecute) and wPos and self:CastW(wPos) then
+            return
+        end
+    -- self.lastCalled = "checkpoint12"
+    -- if q and (qTime or self.lastAttackExecute) and aim and self:CastQ(aim) then
+    --     return
+    -- end
     end
     self.lastCalled = "checkpoint13"
 
@@ -934,6 +1006,8 @@ function Lucian:OnProcessSpell(obj, spell)
         elseif spell.spellData.name == "LucianR" then
             self.last.r = nil
             self.usedSpell = RiotClock.time
+            self.autoFollow = true
+            self.rData.direction = (Vector(spell.endPos) - Vector(spell.startPos)):normalized()
         end
         return
     end

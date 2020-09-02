@@ -13,8 +13,7 @@ local function class()
 end
 
 local Xerath = class()
-Xerath.version = 3.82
-
+Xerath.version = 3.83
 
 require("FF15Menu")
 require("utils")
@@ -39,7 +38,7 @@ function Xerath:__init()
     self.w = {
         type = "circular",
         range = 1000,
-        delay = 0.83,
+        delay = 0.85,
         radius = 275,
         speed = math.huge
     }
@@ -119,10 +118,10 @@ function Xerath:Menu()
 
     self.menu:sub("dreamTs", "Target Selector")
     self.menu:sub("antigap", "Anti Gapclose")
-    self.antiGapHeros = {}
     for _, enemy in ipairs(ObjectManager:GetEnemyHeroes()) do
-        self.menu.antigap:checkbox(enemy.charName, enemy.charName, true)
-        self.antiGapHeros[enemy.networkId] = true
+        self.menu.antigap:sub(enemy.charName, enemy.charName)
+        self.menu.antigap[enemy.charName]:checkbox("e", "E", true)
+        self.menu.antigap[enemy.charName]:checkbox("w", "W", true)
     end
 
     self.menu:slider("rr", "R Near Mouse Radius", 0, 3000, 1500)
@@ -391,11 +390,7 @@ function Xerath:OnTick()
                         if ComboMode then
                             eValid = true
                         end
-                        if
-                            pred.targetDashing and self.antiGapHeros[unit.networkId] and
-                                self.menu.antigap[unit.charName]:get() and
-                                self:CastE(pred)
-                         then
+                        if pred.targetDashing and self.menu.antigap[unit.charName].e:get() and self:CastE(pred) then
                             return
                         end
                         if pred.isInterrupt and self.menu.interrupt[pred.interruptName]:get() and self:CastE(pred) then
@@ -427,9 +422,7 @@ function Xerath:OnTick()
                     local pred = w_preds[unit.networkId]
                     if pred then
                         if
-                            (ComboMode or HarassMode or
-                                (pred.targetDashing and self.antiGapHeros[unit.networkId] and
-                                    self.menu.antigap[unit.charName]:get())) and
+                            (ComboMode or HarassMode or (pred.targetDashing and self.menu.antigap[unit.charName].w:get())) and
                                 self:CastW(pred)
                          then
                             return

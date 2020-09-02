@@ -1,4 +1,4 @@
-local version = 1.11
+local version = 1.14
 
 GetInternalWebResultAsync(
     "Empyrean.version",
@@ -37,10 +37,12 @@ local dir = COMMON_PATH .. "Empyrean\\"
 CreateFolder(dir)
 local champs = {
     Ezreal = 3.02,
-    Kaisa = 1.92,
+    Kaisa = 1.93,
     Syndra = 3.4,
-    Xerath = 3.82,
-    Lucian = 1.04
+    Xerath = 3.83,
+    Lucian = 1.1,
+    Zoe = 1,
+    Irelia = 1.1
 }
 if not champs[myHero.charName] then
     return

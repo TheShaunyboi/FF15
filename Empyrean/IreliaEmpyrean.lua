@@ -1,54 +1,32 @@
-if myHero.charName ~= "Irelia" then
-    return
+local function class()
+    return setmetatable(
+        {},
+        {
+            __call = function(self, ...)
+                local result = setmetatable({}, {__index = self})
+                result:__init(...)
+
+                return result
+            end
+        }
+    )
 end
 
-local Irelia = {}
-local version = 1.1
+local Irelia = class()
+Irelia.version = 1.1
 local passiveBaseScale = {15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66}
 local sheenTimer = os.clock()
-
-GetInternalWebResultAsync(
-    "IreliaEmpyrean.version",
-    function(v)
-        if tonumber(v) > version then
-            DownloadInternalFileAsync(
-                "IreliaEmpyrean.lua",
-                SCRIPT_PATH,
-                function(success)
-                    if success then
-                        PrintChat("Updated. Press F5")
-                    end
-                end
-            )
-        end
-    end
-)
 
 require("FF15Menu")
 require("utils")
 local DreamTS = require("DreamTS")
 local dmgLib = require("FF15DamageLib")
-local Orbwalker = require("FF15OL")
+local Orbwalker = require "ModernUOL"
 local Vector
 local LineSegment = require("GeometryLib").LineSegment
 
-function OnLoad()
-    if not _G.Prediction then
-        _G.LoadPaidScript(_G.PaidScript.DREAM_PRED)
-    end
-
-    if not _G.AuroraOrb and not _G.LegitOrbwalker then
-        LoadPaidScript(PaidScript.AURORA_BUNDLE_DEV)
-    end
-
-    Vector = _G.Prediction.Vector
-
-    Orbwalker:Setup()
-    Irelia:__init()
-end
-
 function Irelia:__init()
-    self.orbSetup = false
+    Vector = _G.Prediction.Vector
     self.last = {
         q = nil,
         w = nil,
@@ -56,7 +34,6 @@ function Irelia:__init()
         e2 = nil,
         r = nil
     }
-    self.objTracker = {}
     self.e1Pos = nil
     self.e = {
         type = "linear",
@@ -141,6 +118,12 @@ function Irelia:__init()
             self:OnDeleteObj(...)
         end
     )
+    AddEvent(
+        Events.OnBuffLost,
+        function(...)
+            self:OnBuffLost(...)
+        end
+    )
     PrintChat(
         '<font color="#1CCD00">[<b>¤ Empyrean ¤</b>]:</font>' ..
             ' <font color="#' .. "FFFFFF" .. '">' .. "Irelia Loaded" .. "</font>"
@@ -149,12 +132,12 @@ function Irelia:__init()
 end
 
 function Irelia:Menu()
-    self.menu = Menu("IreliaEmpyrean", "Irelia - Empyrean v. " .. version)
+    self.menu = Menu("IreliaEmpyrean", "Irelia - Empyrean v" .. self.version)
     self.menu:sub("dreamTs", "Target Selector")
-    self.menu:slider("e1Range", "Isolated E1 range", 0, self.e.range, 450):tooltip("Limit E1 when isolated so you don't waste stuns")
+    self.menu:slider("e1Range", "Isolated E1 range", 0, self.e.range, 450)
     self.menu:key("manual", "Semi-Manual R Aim", string.byte("Z"))
-    self.menu:key("specialE", "E Modifier", string.byte("T")):tooltip("Force Full Range E / Force Multi E")
-    self.menu:key("disableE", "Disable E", 20):tooltip("E1 disabled, E2 casts only when guaranteed")
+    self.menu:key("specialE", "Force Full Range E / Force Multi E", string.byte("T"))
+    self.menu:key("disableE", "Disable E1 / Cast E2 on 100% hit", 20)
     self.menu:checkbox("turret", "Enable Turret Check", true, string.byte("K"))
     self.menu:sub("draws", "Draw")
     self.menu.draws:checkbox("q", "Q", true)
@@ -279,7 +262,7 @@ function Irelia:GetQDamage(target)
         local damage = 0
 
         if target.type == GameObjectType.obj_AI_Minion then
-            if target.team ~= myHero.team then
+            if target.team ~= myHero.team and not target.team == 300 then
                 damage =
                     dmgLib:CalculatePhysicalDamage(
                     myHero,
@@ -293,7 +276,8 @@ function Irelia:GetQDamage(target)
                     dmgLib:CalculatePhysicalDamage(
                     myHero,
                     target,
-                    (QLevelDamage[myHero.spellbook:Spell(0).level] + (self:GetTotalAD() * 0.6) + onhitPhysical)
+                    (QLevelDamage[myHero.spellbook:Spell(0).level] + (self:GetTotalAD() * 0.6) + onhitPhysical) +
+                        dmgLib:CalculateMagicDamage(target, myHero, onhitMagical)
                 )
             end
         end
@@ -311,7 +295,11 @@ function Irelia:GetQDamage(target)
 end
 
 function Irelia:CastQ(target)
-    if GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and not target.buffManager:HasBuff("JaxCounterStrike") and not target.buffManager:HasBuff("GalioW") then
+    if
+        GetDistanceSqr(target) <= (self.qRange * self.qRange) and target.isVisible and self:ValidTarget(target) and
+            not target.buffManager:HasBuff("JaxCounterStrike") and
+            not target.buffManager:HasBuff("GalioW")
+     then
         if not self.menu.turret:get() or not self:UnderTurret(target) or self:UnderTurret(myHero) then
             myHero.spellbook:CastSpellFast(0, target.networkId)
             self.last.q = RiotClock.time
@@ -623,6 +611,9 @@ function Irelia:CastR()
 end
 
 function Irelia:OnDraw()
+    if self.e1Pos then
+        DrawHandler:Circle3D(self.e1Pos, 50, Color.Yellow)
+    end
     if self.menu.draws.q:get() and myHero.spellbook:CanUseSpell(0) == 0 then
         DrawHandler:Circle3D(myHero.position, 600, Color.White)
     end
@@ -653,11 +644,7 @@ function Irelia:OnDraw()
 end
 
 function Irelia:OnTick()
-    if not self.orbSetup and (_G.AuroraOrb or _G.LegitOrbwalker) then
-        Orbwalker:Setup()
-        self.orbSetup = true
-    end
-    if self.orbSetup and self:ShouldCast() then
+    if self:ShouldCast() then
         local q = myHero.spellbook:CanUseSpell(0) == 0
         local r = myHero.spellbook:CanUseSpell(3) == 0
         local e = myHero.spellbook:CanUseSpell(2) == 0
@@ -706,7 +693,7 @@ function Irelia:OnProcessSpell(obj, spell)
     end
     if obj ~= nil and spell ~= nil and obj ~= myHero and obj.team ~= myHero.team then
         if spell.spellData.name == "VeigarEventHorizon" then
-            self.cage = spell.endPos
+            self.cage = D3DXVECTOR3(spell.endPos.x, myHero.y, spell.endPos.z)
         end
     end
 end
@@ -714,15 +701,22 @@ end
 function Irelia:OnExecuteCastFrame(obj, spell)
 end
 
+function Irelia:OnBuffLost(obj, buff)
+    if obj and obj.team == myHero.team and obj.type == myHero.type and obj == myHero and buff and buff.name == "sheen" then
+        sheenTimer = os.clock() + 1.7
+        print("true")
+    end
+end
+
 function Irelia:OnCreateObj(obj)
     if obj.name == "Blade" then
         self.e1Pos = obj.position
     end
-    if obj and GetDistanceSqr(obj) < 90000 and obj.name:find("Glow_buf") then
+    if obj and GetDistance(obj) < 300 and obj.name:find("Glow_buf") then
         sheenTimer = os.clock() + 1.7
     end
     if obj.name:lower():find("cage_green") then
-        self.cage = obj.position
+        self.cage = obj
     end
 end
 
@@ -764,3 +758,5 @@ function Irelia:GetTargetRange(dist, all)
         end
     end
 end
+
+return Irelia
