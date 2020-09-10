@@ -403,11 +403,7 @@ end
 function Irelia:LastHitQ()
     local minionsInRange = ObjectManager:GetEnemyMinions()
     for i, minion in ipairs(minionsInRange) do
-        if
-            minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) and
-                GetDistanceSqr(minion, pwHud.hudManager.virtualCursorPos) <= (self.qRange * self.qRange) and
-                self:CanKS(minion)
-         then
+        if minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) and GetDistanceSqr(minion, pwHud.hudManager.virtualCursorPos) <= (self.qRange * self.qRange) and (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark")) then
             if self:CastQ(minion) then
                 return true
             end
