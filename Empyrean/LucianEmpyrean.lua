@@ -13,7 +13,7 @@ local function class()
 end
 
 local Lucian = class()
-Lucian.version = 1.1
+Lucian.version = 1.11
 
 require "FF15Menu"
 require "utils"
@@ -24,6 +24,7 @@ local LineSegment = require("GeometryLib").LineSegment
 local dmgLib = require("FF15DamageLib")
 
 function Lucian:__init()
+    self.lastAttackDeleteTimer = nil
     self.lastAttackInvoke = nil
     self.lastAttackExecute = RiotClock.time
     self.lastAttack = {
@@ -191,8 +192,14 @@ function Lucian:__init()
             self:OnBasicAttack(...)
         end
     )
+    AddEvent(
+        Events.OnBuffGain,
+        function(...)
+            self:OnBuffGain(...)
+        end
+    )
     PrintChat("Lucian loaded")
-    PrintChat("Please unbind/unsmartcast Lucian E on League and use the key in the script")
+    PrintChat("Please unbind/unsmartcast Lucian E and R on League and use the key in the script")
 
     self.font = DrawHandler:CreateFont("Calibri", 10)
 end
@@ -223,6 +230,9 @@ function Lucian:OnDraw()
     if buff then
         local text = "Auto follow R: " .. (self.autoFollow and "on" or "off")
         DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
+        local pos1 = Renderer:WorldToScreen(myHero.position)
+        local pos2 = Renderer:WorldToScreen((Vector(myHero.position) + self.rData.direction * self.r.range):toDX3())
+        DrawHandler:Line(pos1, pos2, Color.White)
     end
     if self.e.queue then
         hasQ = true
@@ -289,19 +299,19 @@ function Lucian:OnDraw()
             return val
         end
     end
-    -- text = "lastPassive: " .. RiotClock.time - self.lastPassive
-    -- text = text .. "\ninvoke: " .. BoolToText(self.lastAttackInvoke)
-    -- text = text .. "\nlastAttackExecute: " .. BoolToText(self.lastAttackExecute)
-    -- text = text .. "\nshouldCast: " .. BoolToText(self:ShouldCast())
-    -- text = text .. "\nlastq: " .. BoolToText(self.last.q)
-    -- text = text .. "\nlastw: " .. BoolToText(self.last.w)
-    -- text = text .. "\nlaste: " .. BoolToText(self.last.e)
-    -- text = text .. "\nlastr: " .. BoolToText(self.last.r)
-    -- text = text .. "\n#passive tracker: " .. BoolToText(#self.passiveTracker)
-    -- text = text .. "\n#ecd: " .. BoolToText(self.eCd)
-    -- text = text .. "\n#usedd spell: " .. BoolToText(self.usedSpell)
-    -- text = text .. "\ne queue: " .. BoolToText(hasQ)
-    -- text = text .. "\nontick end: " .. BoolToText(self.lastCalled)
+    text = "lastPassive: " .. RiotClock.time - self.lastPassive
+    text = text .. "\ninvoke: " .. BoolToText(self.lastAttackInvoke)
+    text = text .. "\nlastAttackExecute: " .. BoolToText(self.lastAttackExecute)
+    text = text .. "\nshouldCast: " .. BoolToText(self:ShouldCast())
+    text = text .. "\nlastq: " .. BoolToText(self.last.q)
+    text = text .. "\nlastw: " .. BoolToText(self.last.w)
+    text = text .. "\nlaste: " .. BoolToText(self.last.e)
+    text = text .. "\nlastr: " .. BoolToText(self.last.r)
+    text = text .. "\n#passive tracker: " .. BoolToText(#self.passiveTracker)
+    text = text .. "\n#ecd: " .. BoolToText(self.eCd)
+    text = text .. "\n#usedd spell: " .. BoolToText(self.usedSpell)
+    text = text .. "\ne queue: " .. BoolToText(hasQ)
+    text = text .. "\nontick end: " .. BoolToText(self.lastCalled)
     -- DrawHandler:Text(DrawHandler.defaultFont, D3DXVECTOR2(200, 200), text, Color.White)
 end
 
@@ -346,7 +356,7 @@ function Lucian:GetQ(short)
             preds[target.networkId] and (inAA or preds[target.networkId].rates["slow"]) and
                 (not short or (inAa and not res) or canKS)
          then
-            local checkWidth = self.q.width * 2 / 3
+            local checkWidth = self.q.width * 1 / 2
             local checkSpell =
                 setmetatable(
                 {
@@ -392,7 +402,7 @@ function Lucian:GetQ(short)
                     end
                 end
             end
-            if best and closest < checkWidth / 2 and (not res or canKS) then
+            if best and closest < checkWidth / 2 * 3 and (not res or canKS) then
                 res, enemy = best, target
             end
             if best2 and closest2 < self.q.width + target.boundingRadius and (not res or canKS) and inAa then
@@ -616,16 +626,26 @@ function Lucian:AutoFollow()
                 local pos1 = Vector(myHero.position) + hor
                 local pos2 = Vector(myHero.position) - hor
                 local adjustPos = pos1:distSqr(ts) > pos2:distSqr(ts) and pos2 or pos1
+                local movePos = adjustPos
                 if dist <= enemy.boundingRadius + self.rData.width2 / 2 then
                     local mousePos = Vector(pwHud.hudManager.virtualCursorPos)
                     local verDist = math.sqrt((enemy.boundingRadius + self.rData.width2 / 2) ^ 2 - dist ^ 2)
                     local endPos2 =
                         Vector(myHero.position) - self.rData.direction * (self.r.range + enemy.boundingRadius)
                     local dir = endPos:distSqr(mousePos) < endPos2:distSqr(mousePos) and 1 or -1
-                    local movePos = adjustPos + dir * self.rData.direction * verDist
+                    movePos = adjustPos + dir * self.rData.direction * verDist
+                end
+                if movePos then
+                    local interval, cur = 25, 0
+                    local moveDist = Vector(myHero.position):dist(movePos)
+                    while cur <= moveDist do
+                        if NavMesh:IsWall(Vector(myHero.position):extended(movePos, cur):toDX3()) then
+                            Orbwalker:BlockMove(false)
+                            return
+                        end
+                        cur = cur + interval
+                    end
                     myHero:IssueOrder(GameObjectOrder.MoveTo, movePos:toDX3())
-                else
-                    myHero:IssueOrder(GameObjectOrder.MoveTo, adjustPos:toDX3())
                 end
                 return
             end
@@ -635,6 +655,11 @@ function Lucian:AutoFollow()
 end
 
 function Lucian:OnTick()
+    if self.lastAttackDeleteTimer and RiotClock.time > self.lastAttackDeleteTimer then
+        self.lastAttackDeleteTimer = nil
+        self.lastAttackInvoke = nil
+        self.lastAttackExecute = RiotClock.time
+    end
     self:DetectECd()
     self.eCd = self:CalcECd()
     self:ManagePassiveTracker()
@@ -751,6 +776,14 @@ function Lucian:Combo()
                 return
             end
         end
+        if
+            q and (qTime or self.lastAttackExecute) and aim and
+                target.health + target.allShield <=
+                    self:GetQDamage(target) + dmgLib:GetAutoAttackDamage(myHero, target) * 2 and
+                self:CastQ(aim)
+         then
+            return
+        end
         if w and wInRange and (wTime or self.lastAttackExecute) and wPos and self:CastW(wPos) then
             return
         end
@@ -843,9 +876,13 @@ function Lucian:QueueEPos()
 end
 
 function Lucian:OnCreateObject(obj)
+    if obj.name == "LucianRMissile" then
+        self.rData.direction = (Vector(obj.asMissile.destPos) - Vector(obj.asMissile.launchPos)):normalized()
+    end
     if string.find(obj.name, "Lucian") and string.find(obj.name, "Attack") then
-        self.lastAttackExecute = RiotClock.time
-        self.lastAttackInvoke = nil
+        self.lastAttack.isExecuted = true
+        self.lastAttack.time = RiotClock.time
+        self.lastAttackDeleteTimer = RiotClock.time + 0.02
         self.usedSpell = nil
     end
     if obj.name == "LucianWMissile" then
@@ -1004,10 +1041,10 @@ function Lucian:OnProcessSpell(obj, spell)
             self.last.e = nil
             self.usedSpell = RiotClock.time
         elseif spell.spellData.name == "LucianR" then
-            self.last.r = nil
-            self.usedSpell = RiotClock.time
-            self.autoFollow = true
-            self.rData.direction = (Vector(spell.endPos) - Vector(spell.startPos)):normalized()
+        -- self.last.r = nil
+        -- self.usedSpell = RiotClock.time
+        -- self.autoFollow = true
+        -- self.rData.direction = (Vector(spell.endPos) - Vector(spell.startPos)):normalized()
         end
         return
     end
@@ -1029,15 +1066,22 @@ end
 
 function Lucian:OnExecuteCastFrame(obj, spell)
     if obj == myHero then
-        self.lastAttack.isExecuted = true
-        self.lastAttack.time = RiotClock.time
         if spell.spellData.name == "LucianQ" then
             self.last.q = nil
             self.usedSpell = RiotClock.time
         elseif spell.spellData.name == "LucianW" then
             self.last.w = nil
             self.usedSpell = RiotClock.time
+        elseif string.find(spell.spellData.name, "Lucian") and string.find(spell.spellData.name, "Attack") then
         end
+    end
+end
+
+function Lucian:OnBuffGain(obj, buff)
+    if obj == myHero and buff.name == "LucianR" then
+        self.last.r = nil
+        self.usedSpell = RiotClock.time
+        self.autoFollow = true
     end
 end
 
