@@ -404,7 +404,7 @@ function Irelia:GetBestQ()
             (enemy.buffManager:HasBuff("ireliamark") and (passive or not minDistMinion) and
                 (GetDistanceSqr(enemy) >
                     (myHero.boundingRadius + enemy.boundingRadius + myHero.characterIntermediate.attackRange) ^ 2 or
-                    self:GetShieldedHealth("AD", myHero) <=
+                    self:GetShieldedHealth("AD", enemy) <=
                         2 * self:GetQDamage(enemy) + dmgLib:GetAutoAttackDamage(myHero, enemy) or
                     (myHero.health / myHero.maxHealth <= 0.3 and enemy.health > myHero.health) or
                     enemyDist > dist2 or
@@ -424,7 +424,11 @@ end
 function Irelia:LastHitQ()
     local minionsInRange = ObjectManager:GetEnemyMinions()
     for i, minion in ipairs(minionsInRange) do
-        if minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) and GetDistanceSqr(minion, pwHud.hudManager.virtualCursorPos) <= (self.qRange * self.qRange) and (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark")) then
+        if
+            minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) and
+                GetDistanceSqr(minion, pwHud.hudManager.virtualCursorPos) <= (self.qRange * self.qRange) and
+                (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark"))
+         then
             if self:CastQ(minion) then
                 return true
             end
@@ -789,8 +793,8 @@ function Irelia:AutoR()
             local predPos = rPreds[rTarget.networkId].targetPosition
             local castPos = rPreds[rTarget.networkId].castPosition
             local res = self:RContains(predPos, (Vector(castPos) - Vector(myHero.position)):normalized(), checkTable)
-            local close = GetDistanceSqr(predPos) <= 300^2 
-            local distsFromHero, distsFromMouse = 0,0
+            local close = GetDistanceSqr(predPos) <= 300 ^ 2
+            local distsFromHero, distsFromMouse = 0, 0
             local count = 0
             for pos in pairs(res) do
                 if res[pos] then
@@ -800,7 +804,7 @@ function Irelia:AutoR()
                 end
             end
             local closeMouse = distsFromHero > distsFromMouse
-            if count > bestCount and (close or (count >= 3 and closeMouse))  then
+            if count > bestCount and (close or (count >= 3 and closeMouse)) then
                 bestCast, bestCount = rPreds[rTarget.networkId], count
             end
         end
