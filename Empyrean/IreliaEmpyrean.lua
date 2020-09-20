@@ -13,7 +13,7 @@ local function class()
 end
 
 local Irelia = class()
-Irelia.version = 1.2
+Irelia.version = 1.22
 local passiveBaseScale = {15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66}
 local sheenTimer = os.clock()
 
@@ -40,7 +40,8 @@ function Irelia:__init()
         type = "linear",
         speed = math.huge,
         range = 775,
-        delay = 0.35,
+        delayBase = 0.4,
+        delay = 0.4,
         width = 135,
         missileSpeed = 2000,
         collision = {
@@ -55,7 +56,7 @@ function Irelia:__init()
         type = "circular",
         speed = math.huge,
         range = 3000,
-        delay = 0.35,
+        delay = self.e.delayBase,
         radius = 0
     }
     self.turrets = {}
@@ -377,18 +378,28 @@ function Irelia:GetBestQ()
     local r = myHero.spellbook:CanUseSpell(3) == 0
     local e = myHero.spellbook:CanUseSpell(2) == 0
     local enemiesInRange = self:GetTargetRange(self.qRange, true)
+    local qCount = 0
+    for _, enemy in ipairs(enemiesInRange) do
+        if enemy.buffManager:HasBuff("ireliamark") or self:CanKS(enemy) then
+            qCount = qCount + 1
+        end
+    end
+    local passiveStacks = myHero.buffManager:HasBuff("ireliapassivestacks")
+
     for _, enemy in ipairs(enemiesInRange) do
         local enemyDist = GetDistanceSqr(enemy, mousePos)
         if
             (enemy.buffManager:HasBuff("ireliamark") and (passive or not minDistMinion) and
                 (GetDistanceSqr(enemy) >
                     (myHero.boundingRadius + enemy.boundingRadius + myHero.characterIntermediate.attackRange) ^ 2 or
-                    self:GetShieldedHealth("AD", myHero) <=
+                    self:GetShieldedHealth("AD", enemy) <=
                         2 * self:GetQDamage(enemy) + dmgLib:GetAutoAttackDamage(myHero, enemy) or
                     (myHero.health / myHero.maxHealth <= 0.3 and enemy.health > myHero.health) or
                     enemyDist > dist2 or
                     r or
-                    e)) or
+                    e or
+                    qCount > 1 or
+                    (passiveStacks and passiveStacks.count == 4))) or
                 self:CanKS(enemy)
          then
             if enemyDist < minDistance then
@@ -403,7 +414,11 @@ end
 function Irelia:LastHitQ()
     local minionsInRange = ObjectManager:GetEnemyMinions()
     for i, minion in ipairs(minionsInRange) do
-        if minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) and GetDistanceSqr(minion, pwHud.hudManager.virtualCursorPos) <= (self.qRange * self.qRange) and (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark")) then
+        if
+            minion and GetDistanceSqr(minion) <= (self.qRange * self.qRange) and
+                GetDistanceSqr(minion, pwHud.hudManager.virtualCursorPos) <= (self.qRange * self.qRange) and
+                (self:CanKS(minion) or minion.buffManager:HasBuff("ireliamark"))
+         then
             if self:CastQ(minion) then
                 return true
             end
@@ -560,55 +575,67 @@ function Irelia:GetE2CastPos(pred, targets)
         return
     end
     local count = 0
-    local startPos = Vector(self.blade)
+    local extraDist = 75
+    local startPos = Vector(self.blade):extended(Vector(pred.castPosition), -50)
     local playerPos = Vector(myHero)
     local endPos =
         self:RaySetDist(startPos, (Vector(pred.castPosition) - startPos):normalized(), playerPos, self.e.range)
-    local distSqr = GetDistanceSqr(self.blade, pred.castPosition)
     local seg = LineSegment(startPos, endPos)
     local res = seg:closest(playerPos):toDX3()
-    local distSqr2 = GetDistanceSqr(self.blade, closest)
-    local limit = GetDistanceSqr(endPos:toDX3(), self.blade)
-    if distSqr2 < distSqr then
-        distSqr = distSqr2
-        res = pred.castPosition
+    local dist2 = GetDistance(self.blade, pred.castPosition) + extraDist
+    local dist = GetDistance(self.blade, closest)
+    local limit = GetDistance(endPos:toDX3(), self.blade) + extraDist
+    local targetQRange = false
+    --closest is closer than pred pos
+    if dist < dist2 then
+        dist = dist2
+        res = startPos:extended(endPos, dist):toDX3()
     end
     for _, target in pairs(targets) do
-        local seg =
-            LineSegment(
-            startPos:extended(endPos, -target.boundingRadius),
-            endPos:extended(startPos, -target.boundingRadius)
-        )
+        -- local seg =
+        --     LineSegment(
+        --     startPos:extended(endPos, -target.boundingRadius),
+        --     endPos:extended(startPos, -target.boundingRadius)
+        -- )
         self.eTest.delay = self.e.delay
         local pred = _G.Prediction.GetPrediction(target, self.eTest)
         if pred and pred.targetPosition then
-            local dist = seg:distanceTo(Vector(pred.targetPosition))
-            if dist <= self.e.width / 2 + target.boundingRadius then
+            local segDist = seg:distanceTo(Vector(pred.targetPosition))
+            if segDist <= self.e.width / 2 + target.boundingRadius then
                 count = count + 1
-                distSqr2 = GetDistanceSqr(self.blade, pred.targetPosition) ^ 2 - dist ^ 2
-                if distSqr2 > distSqr and distSqr2 <= limit then
-                    distSqr = distSqr2
-                    res = startPos:extended(endPos, math.sqrt(distSqr)):toDX3()
+                if GetDistanceSqr(pred.targetPosition) < self.qRange ^ 2 then
+                    targetQRange = true
+                end
+                dist2 = math.sqrt(GetDistance(self.blade, pred.targetPosition) - segDist ^ 2) + extraDist
+                if dist2 > dist and dist2 <= limit then
+                    dist = dist2
+                    res = startPos:extended(endPos, dist):toDX3()
                 end
             end
         end
     end
-    return res, count
+    local forceE = false
+    if count == 1 and GetDistanceSqr(pred.castPosition, self.blade) <= (self.e.width + 55) ^ 2 then
+        res = myHero.position
+        forceE = true
+    end
+    return res, count, targetQRange, forceE
 end
 
 function Irelia:CalcE2(target, enemies)
     local dist = GetDistance(target.position)
-    self.e.delay = 0.35 + dist / self.e.missileSpeed
+    self.e.delay = self.e.delayBase + dist / self.e.missileSpeed
     local pred
     local lasts = {}
     local check = nil
     local count = 0
+    local targetQRange = false
     while not check do
         pred = _G.Prediction.GetPrediction(target, self.e, self.blade)
         if pred and pred.castPosition then
             local castPos
-            castPos, count = self:GetE2CastPos(pred, enemies)
-            self.e.delay = 0.35 + GetDistance(castPos) / self.e.missileSpeed
+            castPos, count, targetQRange = self:GetE2CastPos(pred, enemies)
+            self.e.delay = self.e.delayBase + GetDistance(castPos) / self.e.missileSpeed
             lasts[#lasts + 1] = self.e.delay
             check = self:CheckForSame(lasts)
         else
@@ -616,12 +643,12 @@ function Irelia:CalcE2(target, enemies)
         end
     end
     self.e.delay = check
-    return count
+    return count, targetQRange
 end
 
 function Irelia:CastE2()
     local targets = self:GetTargetRange(math.max(self.e.range, GetDistance(self.blade) + 300), true)
-    local cast, best, cur = nil, 0, 0
+    local bestPred, cast, best, cur, curCloseTarget, closeTarget = nil, nil, 0, 0, false, false
     local e2Targets, e2Preds =
         self:GetTarget(
         self.e,
@@ -629,16 +656,21 @@ function Irelia:CastE2()
         self.blade,
         function(unit)
             cur = 0
-            local count = self:CalcE2(unit, targets)
+            local count, targetQRange = self:CalcE2(unit, targets)
             if count then
+                curCloseTarget = targetQRange
                 cur = count
                 return unit
             end
         end,
         function(unit, pred)
-            if pred and cur and cur > best then
-                cast = self:GetE2CastPos(pred, targets)
-                best = cur
+            if pred and (cur > best or (cur == best and not closeTarget and curCloseTarget)) then
+                cast, _, _, forceE = self:GetE2CastPos(pred, targets)
+                if forceE or pred.rates["slow"] then
+                    closeTarget = curCloseTarget
+                    bestPred = pred
+                    best = cur
+                end
             end
         end
     )
@@ -677,9 +709,9 @@ function Irelia:CastE2()
     --     end
     -- end
     if cast then
-        PrintChat(best)
         myHero.spellbook:CastSpellFast(2, cast)
-        -- bestPred:draw()
+        PrintChat("e2 :" .. best)
+        bestPred:draw()
         self.last.e2 = RiotClock.time
         return true
     end
@@ -768,8 +800,8 @@ function Irelia:AutoR()
             local predPos = rPreds[rTarget.networkId].targetPosition
             local castPos = rPreds[rTarget.networkId].castPosition
             local res = self:RContains(predPos, (Vector(castPos) - Vector(myHero.position)):normalized(), checkTable)
-            local close = GetDistanceSqr(predPos) <= 300^2 
-            local distsFromHero, distsFromMouse = 0,0
+            local close = GetDistanceSqr(predPos) <= 300 ^ 2
+            local distsFromHero, distsFromMouse = 0, 0
             local count = 0
             for pos in pairs(res) do
                 if res[pos] then
@@ -779,13 +811,13 @@ function Irelia:AutoR()
                 end
             end
             local closeMouse = distsFromHero > distsFromMouse
-            if count > bestCount and (close or (count >= 3 and closeMouse))  then
+            if count > bestCount and (close or (count >= 3 and closeMouse)) then
                 bestCast, bestCount = rPreds[rTarget.networkId], count
             end
         end
     end
     if bestCast then
-        PrintChat(bestCount)
+        PrintChat("r: " .. bestCount)
         myHero.spellbook:CastSpell(3, bestCast.castPosition)
         self.last.r = RiotClock.time
         bestCast:draw()
@@ -932,7 +964,7 @@ function Irelia:OnTick()
             end
         end
     end
-    -- self:KillSteal()
+    self:KillSteal()
 end
 
 function Irelia:OnProcessSpell(obj, spell)

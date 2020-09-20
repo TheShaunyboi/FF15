@@ -13,7 +13,7 @@ local function class()
 end
 
 local Xerath = class()
-Xerath.version = 3.83
+Xerath.version = 3.84
 
 require("FF15Menu")
 require("utils")
@@ -107,6 +107,12 @@ function Xerath:__init()
         Events.OnProcessSpell,
         function(...)
             self:OnProcessSpell(...)
+        end
+    )
+    AddEvent(
+        Events.OnExecuteCastFrame,
+        function(...)
+            self:OnExecuteCastFrame(...)
         end
     )
     PrintChat("Xerath loaded")
@@ -357,7 +363,7 @@ function Xerath:OnTick()
         UnitsInRange[enemy.index] = InComboRange(enemy)
     end
 
-    local ComboMode = Orbwalker:GetMode() == "Combo"
+    local ComboMode = Orbwalker:GetMode() == "Combo" and not Orbwalker:IsAttacking()
     local HarassMode = Orbwalker:GetMode() == "Harass" and not Orbwalker:IsAttacking()
     local shouldCast = self:ShouldCast()
     local eValid = false
@@ -494,24 +500,39 @@ end
 
 function Xerath:OnProcessSpell(obj, spell)
     if obj == myHero then
-        if spell.spellData.name == "XerathArcanopulseChargeUp" then
-            self.LastCasts.Q1 = nil
-        elseif spell.spellData.name == "XerathArcanopulse2" then
+        -- if spell.spellData.name == "XerathArcanopulseChargeUp" then
+        --     self.LastCasts.Q1 = nil
+        if spell.spellData.name == "XerathArcanopulse2" then
             self.LastCasts.Q2 = nil
-        elseif spell.spellData.name == "XerathArcaneBarrage2" then
-            self.LastCasts.W = nil
-        elseif spell.spellData.name == "XerathMageSpear" then
-            self.LastCasts.E = nil
+        -- elseif spell.spellData.name == "XerathArcaneBarrage2" then
+        --     self.LastCasts.W = nil
+        -- elseif spell.spellData.name == "XerathMageSpear" then
+        --     self.LastCasts.E = nil
         elseif spell.spellData.name == "XerathLocusPulse" then
             self.LastCasts.R = nil
         end
     end
 end
 
+function Xerath:OnExecuteCastFrame(obj, spell)
+    if obj == myHero then
+        if spell.spellData.name == "XerathArcanopulseChargeUp" then
+            self.LastCasts.Q1 = nil
+        -- elseif spell.spellData.name == "XerathArcanopulse2" then
+        --     self.LastCasts.Q2 = nil
+        elseif spell.spellData.name == "XerathArcaneBarrage2" then
+            self.LastCasts.W = nil
+        elseif spell.spellData.name == "XerathMageSpear" then
+            self.LastCasts.E = nil
+        end
+    end
+end
+
+
 function Xerath:GetQRange(remainingTime)
     local chargeStart = RiotClock.time + remainingTime - 4
     return math.min(
-        self.q.min + (self.q.max - self.q.min) * (RiotClock.time - chargeStart - 0.07) / self.q.charge,
+        self.q.min + (self.q.max - self.q.min) * (RiotClock.time - chargeStart + 0.06 + NetClient.ping / 2000) / self.q.charge,
         self.q.max
     )
 end
