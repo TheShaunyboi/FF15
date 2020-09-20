@@ -242,6 +242,9 @@ function Irelia:GetQDamage(target)
             local item1 = myHero.inventory:HasItem(3057)
             local item2 = myHero.inventory:HasItem(3100)
             local item3 = myHero.inventory:HasItem(3091)
+            local item4 = myHero.inventory:HasItem(1043)
+            local item5 = myHero.inventory:HasItem(3153)
+            local item6 = myHero.inventory:HasItem(3748)
             if item1 and myHero.spellbook:CanUseSpell(item1.spellSlot) == 0 then
                 hasSheen = true
             end
@@ -250,6 +253,15 @@ function Irelia:GetQDamage(target)
             end
             if item3 and myHero.spellbook:CanUseSpell(item3.spellSlot) == 0 then
                 hasWitsEnd = true
+            end
+            if item4 and myHero.spellbook:CanUseSpell(item4.spellSlot) == 0 then
+                hasRecurve = true
+            end
+            if item5 then
+                hasBOTRK = true
+            end
+            if item6 then
+                hasTitanic = true
             end
             last_item_update = os.clock() + 5
         end
@@ -263,9 +275,18 @@ function Irelia:GetQDamage(target)
         if hasSheen and not hasTF and (os.clock() >= sheenTimer or myHero.buffManager:HasBuff("sheen")) then
             onhitPhysical = onhitPhysical + myHero.characterIntermediate.baseAttackDamage
         end
-        if hasWitsEnd then
+        if hasWitsEnd then 
             local dmg = WitsEndDamage[myHero.experience.level]
             onhitMagical = onhitMagical + dmg
+        end
+        if hasRecurve then
+            onhitPhysical = onhitPhysical + 15
+        end
+        if hasBOTRK then
+            onhitPhysical = onhitPhysical + (target.health * 0.12)
+        end
+        if hasTitanic then
+            onhitPhysical = onhitPhysical + (myHero.maxHealth * 0.015) + 5
         end
         if myHero.buffManager:HasBuff("ireliapassivestacksmax") then
             local passiveTotalDmg = ((self:GetBonusAD()) * 0.35) + passiveBaseScale[myHero.experience.level]
