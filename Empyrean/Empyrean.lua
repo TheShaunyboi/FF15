@@ -1,4 +1,4 @@
-local version = 1.17
+local version = 1.18
 
 GetInternalWebResultAsync(
     "Empyrean.version",
@@ -38,9 +38,9 @@ CreateFolder(dir)
 local champs = {
     Ezreal = 3.02,
     Kaisa = 1.93,
-    Syndra = 3.4,
-    Xerath = 3.84,
-    Lucian = 1.11,
+    Syndra = 3.41,
+    Xerath = 3.85,
+    Lucian = 1.12,
     Zoe = 1,
     Irelia = 1.22
 }

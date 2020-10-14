@@ -13,7 +13,7 @@ local function class()
 end
 
 local Xerath = class()
-Xerath.version = 3.84
+Xerath.version = 3.85
 
 require("FF15Menu")
 require("utils")
@@ -180,10 +180,6 @@ function Xerath:OnDraw()
     end
     if self:IsRActive() then
         DrawHandler:Circle3D(pwHud.hudManager.virtualCursorPos, self.menu.rr:get(), Color.White)
-        local text = "All"
-        if self.r.mode then
-            text = "Mouse"
-        end
         DrawHandler:Text(DrawHandler.defaultFont, Renderer:WorldToScreen(myHero.position), text, Color.White)
     end
 end
@@ -281,7 +277,6 @@ function Xerath:CastR()
                 allTarget ~= self.r.lastTarget
          then
             self.r.lastTarget = nil
-            self.r.mode = nil
         end
 
         if mouseTarget and mousePred then
@@ -293,7 +288,7 @@ function Xerath:CastR()
                 mousePred:draw()
                 return true
             end
-        elseif (not self.r.mode) and allTarget and allPred then
+        elseif allTarget and allPred then
             if allPred.rates["very slow"] then
                 myHero.spellbook:CastSpell(3, allPred.castPosition)
                 self.LastCasts.R = RiotClock.time
@@ -387,7 +382,15 @@ function Xerath:OnTick()
             self.r.mode = nil
             if e then
                 local e_targets, e_preds =
-                    self.TS:GetTargets(self.e, myHero, InComboRangeCallback, nil, self.TS.Modes["Hybrid [1.0]"])
+                    self.TS:GetTargets(
+                    self.e,
+                    myHero,
+                    function(unit)
+                        return GetDistanceSqr(unit) <= (self.e.range + unit.boundingRadius) ^ 2
+                    end,
+                    nil,
+                    self.TS.Modes["Hybrid [1.0]"]
+                )
 
                 for i = 1, #e_targets do
                     local unit = e_targets[i]
@@ -428,7 +431,8 @@ function Xerath:OnTick()
                     local pred = w_preds[unit.networkId]
                     if pred then
                         if
-                            (ComboMode or HarassMode or (pred.targetDashing and self.menu.antigap[unit.charName].w:get())) and
+                            (ComboMode or HarassMode or
+                                (pred.targetDashing and self.menu.antigap[unit.charName].w:get())) and
                                 self:CastW(pred)
                          then
                             return
@@ -442,7 +446,14 @@ function Xerath:OnTick()
     if q and not eValid and shouldCast and (ComboMode or (HarassMode and notW)) then
         self.q.range = self.q.max
 
-        local q_target, q_pred = self.TS:GetTarget(self.q, myHero, InComboRangeCallback)
+        local q_target, q_pred =
+            self.TS:GetTarget(
+            self.q,
+            myHero,
+            function(unit)
+                return GetDistanceSqr(unit) <= (self.q.range + unit.boundingRadius) ^ 2
+            end
+        )
 
         if q_target and q_pred and self:CastQ(q_pred) then
             return
@@ -503,11 +514,11 @@ function Xerath:OnProcessSpell(obj, spell)
         -- if spell.spellData.name == "XerathArcanopulseChargeUp" then
         --     self.LastCasts.Q1 = nil
         if spell.spellData.name == "XerathArcanopulse2" then
+            -- elseif spell.spellData.name == "XerathArcaneBarrage2" then
+            --     self.LastCasts.W = nil
+            -- elseif spell.spellData.name == "XerathMageSpear" then
+            --     self.LastCasts.E = nil
             self.LastCasts.Q2 = nil
-        -- elseif spell.spellData.name == "XerathArcaneBarrage2" then
-        --     self.LastCasts.W = nil
-        -- elseif spell.spellData.name == "XerathMageSpear" then
-        --     self.LastCasts.E = nil
         elseif spell.spellData.name == "XerathLocusPulse" then
             self.LastCasts.R = nil
         end
@@ -517,9 +528,9 @@ end
 function Xerath:OnExecuteCastFrame(obj, spell)
     if obj == myHero then
         if spell.spellData.name == "XerathArcanopulseChargeUp" then
+            -- elseif spell.spellData.name == "XerathArcanopulse2" then
+            --     self.LastCasts.Q2 = nil
             self.LastCasts.Q1 = nil
-        -- elseif spell.spellData.name == "XerathArcanopulse2" then
-        --     self.LastCasts.Q2 = nil
         elseif spell.spellData.name == "XerathArcaneBarrage2" then
             self.LastCasts.W = nil
         elseif spell.spellData.name == "XerathMageSpear" then
@@ -528,11 +539,10 @@ function Xerath:OnExecuteCastFrame(obj, spell)
     end
 end
 
-
 function Xerath:GetQRange(remainingTime)
     local chargeStart = RiotClock.time + remainingTime - 4
     return math.min(
-        self.q.min + (self.q.max - self.q.min) * (RiotClock.time - chargeStart + 0.06 + NetClient.ping / 2000) / self.q.charge,
+        self.q.min + (self.q.max - self.q.min) * (RiotClock.time - chargeStart + NetClient.ping / 2000) / self.q.charge,
         self.q.max
     )
 end

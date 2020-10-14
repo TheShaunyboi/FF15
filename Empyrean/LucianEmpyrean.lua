@@ -13,7 +13,7 @@ local function class()
 end
 
 local Lucian = class()
-Lucian.version = 1.11
+Lucian.version = 1.12
 
 require "FF15Menu"
 require "utils"
@@ -66,7 +66,7 @@ function Lucian:__init()
             type = "linear",
             speed = math.huge,
             shortRange = 500,
-            range = 900,
+            range = 1000,
             width = 90
         },
         {
@@ -114,7 +114,7 @@ function Lucian:__init()
         width = -150,
         collision = {
             ["Wall"] = true,
-            ["Hero"] = true,
+            ["Hero"] = false,
             ["Minion"] = true
         }
     }
@@ -348,15 +348,19 @@ end
 
 function Lucian:GetQ(short)
     local res, enemy = nil, nil
-    local targets, preds = self:GetTarget(self.q, true)
+    local targets, preds =
+        self:GetTarget(
+        self.q,
+        true,
+        function(unit)
+            return GetDistanceSqr(unit) <= self.q.range ^ 2
+        end
+    )
     for _, target in pairs(targets) do
         local inAa = GetDistanceSqr(target) <= (self.q.shortRange + myHero.boundingRadius + target.boundingRadius) ^ 2
         local canKS = self:GetQDamage(target) >= target.health + target.allShield
-        if
-            preds[target.networkId] and (inAA or preds[target.networkId].rates["slow"]) and
-                (not short or (inAa and not res) or canKS)
-         then
-            local checkWidth = self.q.width * 1 / 2
+        if preds[target.networkId] and (not short or (inAa and not res) or canKS) then
+            local checkWidth = self.q.width * 1 / 4
             local checkSpell =
                 setmetatable(
                 {
@@ -402,7 +406,7 @@ function Lucian:GetQ(short)
                     end
                 end
             end
-            if best and closest < checkWidth / 2 * 3 and (not res or canKS) then
+            if best and closest < checkWidth / 1 * 2 and (not res or canKS) then
                 res, enemy = best, target
             end
             if best2 and closest2 < self.q.width + target.boundingRadius and (not res or canKS) and inAa then
@@ -639,10 +643,10 @@ function Lucian:AutoFollow()
                     local interval, cur = 25, 0
                     local moveDist = Vector(myHero.position):dist(movePos)
                     while cur <= moveDist do
-                        if NavMesh:IsWall(Vector(myHero.position):extended(movePos, cur):toDX3()) then
-                            Orbwalker:BlockMove(false)
-                            return
-                        end
+                        -- if NavMesh:IsWall(Vector(myHero.position):extended(movePos, cur):toDX3()) then
+                        --     Orbwalker:BlockMove(false)
+                        --     return
+                        -- end
                         cur = cur + interval
                     end
                     myHero:IssueOrder(GameObjectOrder.MoveTo, movePos:toDX3())
@@ -715,7 +719,7 @@ function Lucian:OnTick()
             return
         end
         self.lastCalled = "checkpoint4"
-        if self.menu.r:get() and self:CastR() then
+        if self.menu.r:get() and RiotClock.time > 0.25 + self.level and self:CastR() then
             return
         end
         self.lastCalled = "checkpoint5"

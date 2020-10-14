@@ -13,7 +13,7 @@ local function class()
 end
 
 local Syndra = class()
-Syndra.version = 3.4
+Syndra.version = 3.41
 
 require "FF15Menu"
 require "utils"
