@@ -360,7 +360,7 @@ function Lucian:GetQ(short)
         local inAa = GetDistanceSqr(target) <= (self.q.shortRange + myHero.boundingRadius + target.boundingRadius) ^ 2
         local canKS = self:GetQDamage(target) >= target.health + target.allShield
         if preds[target.networkId] and (not short or (inAa and not res) or canKS) then
-            local checkWidth = self.q.width * 1 / 4
+            local checkWidth = 0
             local checkSpell =
                 setmetatable(
                 {
@@ -379,7 +379,7 @@ function Lucian:GetQ(short)
                             GetDistanceSqr(minion) <=
                                 (self.q.shortRange + myHero.boundingRadius + minion.boundingRadius) ^ 2
                      then
-                        local dist = self:QCollision(minion, checkPred.castPosition)
+                        local dist = self:QCollision(minion, checkPred.targetPosition)
                         if dist < closest then
                             best, closest = minion, dist
                         end
@@ -406,7 +406,7 @@ function Lucian:GetQ(short)
                     end
                 end
             end
-            if best and closest < checkWidth / 1 * 2 and (not res or canKS) then
+            if best and closest < target.boundingRadius * 2 / 3 and (not res or canKS) then
                 res, enemy = best, target
             end
             if best2 and closest2 < self.q.width + target.boundingRadius and (not res or canKS) and inAa then

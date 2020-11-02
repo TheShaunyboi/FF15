@@ -1,4 +1,4 @@
-local version = 1.18
+local version = 1.19
 
 GetInternalWebResultAsync(
     "Empyrean.version",
@@ -42,7 +42,8 @@ local champs = {
     Xerath = 3.85,
     Lucian = 1.12,
     Zoe = 1,
-    Irelia = 1.22
+    Irelia = 1.22,
+    Yone = 1
 }
 if not champs[myHero.charName] then
     return
