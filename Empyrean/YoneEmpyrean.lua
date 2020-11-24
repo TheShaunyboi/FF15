@@ -13,7 +13,7 @@ local function class()
 end
 
 local Yone = class()
-Yone.version = 1
+Yone.version = 1.01
 
 require("FF15Menu")
 require("utils")
@@ -21,9 +21,20 @@ local DreamTS = require("DreamTS")
 local dmgLib = require("FF15DamageLib")
 
 local Orbwalker = require("ModernUOL")
-local Vector = require("GeometryLib").Vector
+local Vector
 
 function Yone:__init()
+    Vector = _G.Prediction.Vector
+    function Vector:angleBetweenFull(v1, v2)
+        local p1, p2 = (-self + v1), (-self + v2)
+        local theta = p1:polar() - p2:polar()
+        if theta < 0 then
+            theta = theta + 360
+        end
+        return theta
+    end
+    self.lastAttackTarget = nil
+    self.lastAttackTime = RiotClock.time
     self.active_buffs = {}
     self.q = {
         type = "linear",
@@ -76,8 +87,7 @@ function Yone:__init()
     }
 
     self.shadow = nil
-    self.mark = nil
-    self.death = false
+    self.marks = {}
     self.font = DrawHandler:CreateFont("Calibri", 25)
     self:Menu()
     self.TS =
@@ -129,24 +139,35 @@ function Yone:__init()
             self:OnSpellbookCastSpell(...)
         end
     )
+    AddEvent(
+        Events.OnBasicAttack,
+        function(...)
+            self:OnBasicAttack(...)
+        end
+    )
     PrintChat("Yone loaded")
 end
 
 function Yone:Menu()
     self.menu = Menu("YoneEmpyrean", "Yone - Empyrean v" .. self.version)
     self.menu:sub("dreamTs", "Target Selector")
-    self.menu:key("r", "Use semi manual R", string.byte("T"))
+    self.menu:key("r", "Use semi manual R", string.byte("Z"))
+    self.menu:slider("shadowRCount", "R in combo at X enemies", 0, 5, 2)
+    self.menu:key("multiR", "Use manual multi R", string.byte("T"))
+    self.menu:slider("multiRCount", "Multi R at X enemies ", 2, 5, 2)
 end
 
 function Yone:OnDraw()
     DrawHandler:Circle3D(myHero.position, 1000, Color.White)
-    if self.shadow and self.mark then
-        DrawHandler:Text(
-            self.font,
-            Renderer:WorldToScreen(D3DXVECTOR3(myHero.x - 100, myHero.y + 800, myHero.z)),
-            "Enemy Killable with E",
-            Color.Red
-        )
+    if self.shadow then
+        for i, mark in pairs(self.marks) do
+            DrawHandler:Text(
+                self.font,
+                Renderer:WorldToScreen(D3DXVECTOR3(myHero.x - 100, myHero.y + 800 + i * 100, myHero.z)),
+                mark.hero.charName .. " Killable with E",
+                Color.Red
+            )
+        end
     end
 end
 
@@ -184,6 +205,11 @@ function Yone:CastQ3()
     )
     if qTarget and qPred and qPred.rates["slow"] then
         local distSqr = GetDistanceSqr(qPred.targetPosition)
+        if distSqr <= (100 + qTarget.boundingRadius) ^ 2 then
+            local mousePos = pwHud.hudManager.virtualCursorPos
+            myHero.spellbook:CastSpell(0, mousePos)
+            return true
+        end
         if distSqr <= 450 ^ 2 then
             self.q3.width = self.q3.shortWidth
             qTarget, qPred =
@@ -207,6 +233,71 @@ function Yone:CastQ3()
     end
 end
 
+function Yone:CalcBestCastAngle(all, ang)
+    local maxCount = 0
+    local maxStart = nil
+    local maxEnd = nil
+    for i = 1, #all do
+        local base = all[i]
+        local endAngle = base + ang
+        local over360 = endAngle > 360
+        if over360 then
+            endAngle = endAngle - 360
+        end
+        local function isContained(count, angle, base, over360, endAngle)
+            if angle == base and count ~= 0 then
+                return
+            end
+            if not over360 then
+                if angle <= endAngle and angle >= base then
+                    return true
+                end
+            else
+                if angle > base and angle <= 360 then
+                    return true
+                elseif angle <= endAngle and angle < base then
+                    return true
+                end
+            end
+        end
+        local angle = base
+        local j = i
+        local count = 0
+        local hasColl = false
+        local endDelta = angle
+        while (isContained(count, angle, base, over360, endAngle)) do
+            if count > 10 then
+            end
+            if angle == 0 then
+                hasColl = true
+            end
+            endDelta = all[j]
+            count = count + 1
+            j = j + 1
+            if j > #all then
+                j = 1
+            end
+            angle = all[j]
+        end
+        if hasColl and count > maxCount then
+            maxCount = count
+            maxStart = base
+            maxEnd = endDelta
+        end
+    end
+    if maxStart and maxEnd then
+        PrintChat('count: ' .. maxCount)
+        if maxStart + ang > 360 then
+            maxEnd = maxEnd + 360
+        end
+        local res = (maxStart + maxEnd) / 2
+        if res > 360 then
+            res = res - 360
+        end
+        return math.rad(res)
+    end
+end
+
 function Yone:CastW()
     local wTarget, wPred =
         self.TS:GetTarget(
@@ -216,9 +307,25 @@ function Yone:CastW()
             return GetDistanceSqr(unit) <= (self.w.range - 50) ^ 2
         end
     )
+    local wTargets, wPreds = self.TS:GetTargets(self.w)
     if wTarget and wPred then
-        myHero.spellbook:CastSpell(1, wPred.castPosition)
-        wPred:draw()
+        local pos = wPred.castPosition
+        local hits = {}
+        for _, pred in pairs(wPreds) do
+            if pred and pred.castPosition then
+                local angle = Vector(myHero.position):angleBetweenFull(Vector(pos), Vector(pred.castPosition))
+                table.insert(hits, angle)
+            end
+        end
+        table.sort(hits)
+        local res = self:CalcBestCastAngle(hits, self.w.angle)
+        if res then
+            local castPosition =
+                (Vector(myHero.position) +
+                (Vector(pos) - Vector(myHero.position)):rotated(0, res, 0):normalized() * self.w.range):toDX3()
+            myHero.spellbook:CastSpell(SpellSlot.W, castPosition)
+            return res
+        end
         return true
     end
 end
@@ -265,7 +372,7 @@ function Yone:LastHit()
                 minion and minion.isVisible and minion.characterIntermediate.movementSpeed > 0 and minion.isTargetable and
                     not minion.isDead and
                     minion.maxHealth > 5 and
-                    Orbwalker:GetCurrentTarget() ~= minion and
+                    (not self.lastAttackTarget or self.lastAttackTarget ~= minion) and
                     GetDistanceSqr(minion) <= (self.q.range + minion.boundingRadius) ^ 2 and
                     (not Orbwalker:CanAttack() or (self:GetAARange() < GetDistance(minion)))
              then
@@ -293,7 +400,7 @@ function Yone:UpdateSpellDelays()
     self.w.delay = (0.5 * (1 - math.min((myHero.characterIntermediate.attackSpeedMod - 1) * 0.58, 0.66)))
 end
 
-function Yone:MultiR()
+function Yone:MultiR(minCount)
     local rTargets, rPreds =
         self.TS:GetTargets(
         self.r,
@@ -302,7 +409,7 @@ function Yone:MultiR()
             return GetDistanceSqr(unit) <= (self.r.range + unit.boundingRadius) ^ 2
         end
     )
-    local bestCount, bestObj, bestPred = 2, nil, nil
+    local bestCount, bestObj, bestPred = minCount - 1, nil, nil
     for _, enemy in pairs(rTargets) do
         count = 0
         pred = rPreds[enemy.networkId]
@@ -326,6 +433,10 @@ function Yone:MultiR()
 end
 
 function Yone:OnTick()
+    if self.lastAttackTime and RiotClock.time > self.lastAttackTime + 0.1 then
+        self.lastAttackTarget = nil
+        self.lastAttackTime = nil
+    end
     self:UpdateSpellDelays()
     if myHero.dead then
         return
@@ -340,8 +451,14 @@ function Yone:OnTick()
     local r = myHero.spellbook:CanUseSpell(SpellSlot.R) == 0
     if self.menu.r:get() and r and self:ManualR() then
     end
+    if self.menu.multiR:get() and r and self:MultiR(self.menu.multiRCount:get() - 1) then
+    end
     if ComboMode then
-        if (r and self:MultiR()) or (q and (self:CastQ() or self:CastQ3())) or (w and self:CastW()) then
+        if
+            (r and self.shadow and self.menu.shadowRCount:get() > 0 and self:MultiR(self.menu.shadowRCount:get())) or
+                (q and (self:CastQ() or self:CastQ3())) or
+                (w and self:CastW())
+         then
             return
         end
     else
@@ -356,8 +473,16 @@ function Yone:OnCreateObject(obj)
         self.shadow = obj
     end
     if obj.name:lower():find("yone") and obj.name:lower():find("mark_execute") then
-        self.mark = obj
-        self.death = true
+        local enemies = ObjectManager:GetEnemyHeroes()
+        local hero, closest = nil, 100000 ^ 2
+        for _, enemy in pairs(enemies) do
+            local dist = GetDistanceSqr(enemy.position, obj.position)
+            if dist < closest then
+                closest = dist
+                hero = enemy
+            end
+        end
+        table.insert(self.marks, {obj = obj, hero = hero})
     end
 end
 
@@ -366,8 +491,11 @@ function Yone:OnDeleteObject(obj)
         self.shadow = nil
     end
     if obj.name:lower():find("yone") and obj.name:lower():find("mark_execute") then
-        self.mark = nil
-        self.death = false
+        for i = #self.marks, 1, -1 do
+            if obj == self.marks[i].obj then
+                table.remove(self.marks, i)
+            end
+        end
     end
 end
 
@@ -375,9 +503,20 @@ function Yone:OnProcessSpell(obj, spell)
 end
 
 function Yone:OnExecuteCastFrame(obj, spell)
+    --[[     if obj == myHero and string.find(spell.spellData.name, "Yone") and string.find(spell.spellData.name, "Attack") then
+        self.lastAttackTarget = nil
+        self.lastAttackTime = nil
+    end ]]
 end
 
 function Yone:OnSpellbookCastSpell(slot, startPos, endPos, target)
+end
+
+function Yone:OnBasicAttack(obj, spell)
+    if obj == myHero then
+        self.lastAttackTarget = spell.target
+        self.lastAttackTime = RiotClock.time + myHero.attackCastDelay
+    end
 end
 
 return Yone
